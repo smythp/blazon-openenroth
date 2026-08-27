@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -46,12 +47,18 @@ class BlazonBridge {
     void endPopupFrame();
 
     /**
-     * Text drawn by the engine. Captured only inside a popup frame.
+     * Text drawn by the engine. Inside a popup frame it becomes popup text,
+     * everywhere else it is raw draw evidence for offline authoring, never
+     * semantic authority.
      *
      * @param text                      Raw text with font control codes.
      * @param title                     Whether this came from DrawTitleText.
+     * @param x                         Frame rectangle left, in render pixels.
+     * @param y                         Frame rectangle top.
+     * @param w                         Frame rectangle width.
+     * @param h                         Frame rectangle height.
      */
-    void captureText(std::string_view text, bool title);
+    void captureText(std::string_view text, bool title, int x, int y, int w, int h);
 
     /**
      * Explicit Blazon command from a key press.
@@ -80,6 +87,7 @@ class BlazonBridge {
     void endPointer();
     void emitPopup(const std::string &text);
     void endPopup();
+    void emitRawDraw(std::string_view text, int x, int y, int w, int h);
 
     std::string _socketPath;
     std::string _sourceRun;
@@ -100,4 +108,8 @@ class BlazonBridge {
     std::string _popupText;
     std::vector<std::string> _popupTitles;
     std::vector<std::string> _popupBody;
+
+    uint64_t _frame = 0;
+    uint64_t _rawSequence = 0;
+    std::unordered_map<std::string, uint64_t> _rawSeen;
 };

@@ -324,7 +324,7 @@ void GUIWindow::DrawTitleText(GUIFont *pFont, int horizontalMargin, int vertical
     if (engine->callObserver) {
         engine->callObserver->notify(CALL_GUIWINDOW_DRAWTEXT, std::string(text));
     }
-    BlazonBridge::instance().captureText(text, true);
+    BlazonBridge::instance().captureText(text, true, frameRect.x, frameRect.y, frameRect.w, frameRect.h);
     int width = frameRect.w - horizontalMargin;
     std::string resString = pFont->WrapText(text, frameRect.w, horizontalMargin);
     std::istringstream stream(resString);
@@ -364,7 +364,7 @@ void GUIWindow::DrawText(GUIFont *font, Pointi position, Color color, std::strin
     if (engine->callObserver) {
         engine->callObserver->notify(CALL_GUIWINDOW_DRAWTEXT, std::string(text));
     }
-    BlazonBridge::instance().captureText(text, false);
+    BlazonBridge::instance().captureText(text, false, frameRect.x, frameRect.y, frameRect.w, frameRect.h);
     font->DrawText(frameRect, position, color, text, maxY, shadowColor);
 }
 

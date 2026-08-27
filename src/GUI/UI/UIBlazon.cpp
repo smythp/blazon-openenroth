@@ -14,6 +14,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "GUI/GUIWindow.h"
+
 #include "Library/Logger/Logger.h"
 
 namespace {
@@ -195,6 +197,7 @@ void BlazonBridge::endPointer() {
 void BlazonBridge::observePopupHold(bool holding) {
     if (!_enabled)
         return;
+    ++_frame;
     if (holding && !_popupHolding) {
         _popupHolding = true;
         _popupInstance = ++_instanceSequence;
@@ -217,13 +220,45 @@ void BlazonBridge::beginPopupFrame() {
     _popupBody.clear();
 }
 
-void BlazonBridge::captureText(std::string_view text, bool title) {
-    if (!_inPopupFrame)
+void BlazonBridge::captureText(std::string_view text, bool title, int x, int y, int w, int h) {
+    if (!_enabled)
         return;
+    if (!_inPopupFrame) {
+        emitRawDraw(text, x, y, w, h);
+        return;
+    }
     std::string plain = stripFontCodes(text);
     if (plain.empty())
         return;
     (title ? _popupTitles : _popupBody).push_back(std::move(plain));
+}
+
+void BlazonBridge::emitRawDraw(std::string_view text, int x, int y, int w, int h) {
+    if (text.empty())
+        return;
+    // Screens repaint the same strings every frame, so a text seen within the last half second is not resent.
+    std::string key(text);
+    auto seen = _rawSeen.find(key);
+    if (seen != _rawSeen.end() && _frame - seen->second < 30) {
+        seen->second = _frame;
+        return;
+    }
+    if (_rawSeen.size() > 4096)
+        _rawSeen.clear();
+    _rawSeen[key] = _frame;
+
+    uint64_t sequence = _rawSequence + 1;
+    Json event = Json{
+        {"type", "raw_draw"},
+        {"source_run", _sourceRun},
+        {"mode", static_cast<int>(current_screen_type)},
+        {"window", -1},
+        {"bounds", Json::array({x, y, x + w, y + h})},
+        {"text", key},
+        {"draw_sequence", sequence},
+    };
+    if (sendDatagram(event.dump(-1, ' ', false, Json::error_handler_t::replace)))
+        _rawSequence = sequence;
 }
 
 void BlazonBridge::endPopupFrame() {
