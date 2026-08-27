@@ -2,6 +2,8 @@
 
 #include "UIBranchlessDialogue.h"
 
+#include "GUI/UI/UIBlazon.h"
+
 #include "Engine/Engine.h"
 #include "Engine/AssetsManager.h"
 #include "Engine/Evt/Processor.h"
@@ -24,9 +26,11 @@ GUIWindow_BranchlessDialogue::GUIWindow_BranchlessDialogue(EvtOpcode event) : GU
     current_screen_type = SCREEN_BRANCHLESS_NPC_DIALOG;
 
     CreateCharacterButtons();
+    BlazonBridge::instance().beginMessage();
 }
 
 GUIWindow_BranchlessDialogue::~GUIWindow_BranchlessDialogue() {
+    BlazonBridge::instance().endMessage();
     current_screen_type = prev_screen_type;
     keyboardInputHandler->EndTextInput(this);
 }
@@ -35,6 +39,7 @@ void GUIWindow_BranchlessDialogue::Update() {
     if (current_npc_text.length() > 0 && branchless_dialogue_str.empty())
         branchless_dialogue_str = current_npc_text;
 
+    BlazonBridge::instance().observeMessage(branchless_dialogue_str);
     pGUIWindow_BranchlessDialogue->DrawDialoguePanel(branchless_dialogue_str);
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 

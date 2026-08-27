@@ -27,6 +27,7 @@ constexpr const char *kBuild = "8673e3e7+blazon-pointer";
 constexpr const char *kPointerCollectionKind = "mm7.under_pointer.state";
 constexpr const char *kPopupCollectionKind = "mm7.popup.state";
 constexpr const char *kEventCollectionKind = "mm7.status_event.state";
+constexpr const char *kMessageCollectionKind = "mm7.message.state";
 constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
 constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
 constexpr const char *kSubjectId = "mm7/pointer";
@@ -279,6 +280,44 @@ void BlazonBridge::endEvent() {
     std::string instance = "mm7/status-event/" + std::to_string(_eventInstance);
     sendTransaction(makeEnd("event_instance", instance));
     _eventInstance = 0;
+}
+
+void BlazonBridge::beginMessage() {
+    if (!_enabled)
+        return;
+    if (_messageInstance != 0)
+        endMessage();
+    _messageInstance = ++_instanceSequence;
+    _messageEmitted = false;
+    _messageText.clear();
+}
+
+void BlazonBridge::observeMessage(std::string_view body) {
+    if (!_enabled || _messageInstance == 0)
+        return;
+    std::string plain = stripFontCodes(body);
+    if (plain.empty() || plain == _messageText)
+        return;
+    std::string instance = "mm7/message/" + std::to_string(_messageInstance);
+    std::string collection = instance + "/state";
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "message_instance", kGameSubjectId, "body",
+                                   "branchless_dialogue_str", "GUIWindow_BranchlessDialogue::Update", plain));
+    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "message_instance", kMessageCollectionKind,
+                                       kGameSubjectId, "game", "Engine", "game", "GUIWindow_BranchlessDialogue::Update",
+                                       std::move(fields)))) {
+        _messageEmitted = true;
+        _messageText = plain;
+    }
+}
+
+void BlazonBridge::endMessage() {
+    if (!_enabled || _messageInstance == 0)
+        return;
+    if (_messageEmitted)
+        sendTransaction(makeEnd("message_instance", "mm7/message/" + std::to_string(_messageInstance)));
+    _messageInstance = 0;
+    _messageEmitted = false;
 }
 
 void BlazonBridge::beginDialogue(int npcId) {

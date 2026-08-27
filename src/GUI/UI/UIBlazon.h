@@ -81,6 +81,11 @@ class BlazonBridge {
      * @param options                   Option labels in screen order, exit button last.
      * @param highlighted               Index into options of the highlighted one, or -1.
      */
+    /** Branchless message window: one body, no options, closes on any key. */
+    void beginMessage();
+    void observeMessage(std::string_view body);
+    void endMessage();
+
     void beginDialogue(int npcId);
     void observeDialogue(int npcId, std::string_view name, std::string_view body,
                          const std::vector<std::string> &options, int highlighted);
@@ -139,6 +144,10 @@ class BlazonBridge {
 
     int _eventStamp = 0;
     uint64_t _eventInstance = 0;
+
+    uint64_t _messageInstance = 0;
+    bool _messageEmitted = false;
+    std::string _messageText;
 
     uint64_t _dialogueInstance = 0;
     bool _dialogueEmitted = false;
