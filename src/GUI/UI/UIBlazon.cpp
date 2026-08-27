@@ -27,6 +27,8 @@ constexpr const char *kBuild = "8673e3e7+blazon-pointer";
 constexpr const char *kPointerCollectionKind = "mm7.under_pointer.state";
 constexpr const char *kPopupCollectionKind = "mm7.popup.state";
 constexpr const char *kEventCollectionKind = "mm7.status_event.state";
+constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
+constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
 constexpr const char *kSubjectId = "mm7/pointer";
 constexpr const char *kGameSubjectId = "mm7/game";
 
@@ -60,11 +62,39 @@ Json makeField(const std::string &instance, const std::string &collection, const
     return field;
 }
 
-Json makeSubject(const std::string &sourceRun, const char *subjectId, const char *subjectKind, const char *origin,
-                 const char *hook) {
+Json makeSubject(const std::string &sourceRun, const std::string &subjectId, const char *subjectKind,
+                 const char *origin, const char *hook, const std::string &name) {
     Json subject = makePieceBase(subjectId, subjectKind, makeLifetime("game_session", sourceRun), origin, hook);
-    subject["value"] = Json{{"type", "text"}, {"text", subjectKind}};
+    subject["value"] = Json{{"type", "text"}, {"text", name}};
     return subject;
+}
+
+Json makeTextField(const std::string &instance, const std::string &collection, const char *lifetimeKind,
+                   const std::string &subjectId, const char *key, const char *origin, const char *hook,
+                   const std::string &text) {
+    return makeField(instance, collection, lifetimeKind, subjectId.c_str(), key, origin, hook,
+                     Json{{"type", "text"}, {"text", text}, {"display", text}});
+}
+
+// A complete collection of text fields under one subject, as one replace with the subject upserted first.
+std::string makeCollection(const std::string &sourceRun, const std::string &instance, const std::string &collection,
+                           const char *lifetimeKind, const char *collectionKind, const std::string &subjectId,
+                           const char *subjectKind, const char *subjectOrigin, const std::string &subjectName,
+                           const char *hook, Json fields) {
+    Json upsert = Json{{"op", "upsert"},
+                       {"pieces", Json::array({makeSubject(sourceRun, subjectId, subjectKind, subjectOrigin, hook, subjectName)})}};
+    Json replace = Json{
+        {"op", "replace"},
+        {"collection", Json{
+            {"id", collection},
+            {"kind", collectionKind},
+            {"complete", true},
+            {"subject", subjectId},
+            {"lifetime", makeLifetime(lifetimeKind, instance)},
+        }},
+        {"pieces", std::move(fields)},
+    };
+    return Json::array({upsert, replace}).dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 
 // One complete text collection: the subject plus a text field and a kind field.
@@ -74,7 +104,7 @@ std::string makeTextCollection(const std::string &sourceRun, const std::string &
                                const std::string &text, const char *kindCode) {
     std::string collection = instance + "/state";
     Json upsert = Json{{"op", "upsert"},
-                       {"pieces", Json::array({makeSubject(sourceRun, subjectId, subjectKind, subjectOrigin, hook)})}};
+                       {"pieces", Json::array({makeSubject(sourceRun, subjectId, subjectKind, subjectOrigin, hook, subjectKind)})}};
     Json fields = Json::array();
     fields.push_back(makeField(instance, collection, lifetimeKind, subjectId, "text", origin, hook,
                                Json{{"type", "text"}, {"text", text}, {"display", text}}));
@@ -249,6 +279,85 @@ void BlazonBridge::endEvent() {
     std::string instance = "mm7/status-event/" + std::to_string(_eventInstance);
     sendTransaction(makeEnd("event_instance", instance));
     _eventInstance = 0;
+}
+
+void BlazonBridge::beginDialogue(int npcId) {
+    if (!_enabled)
+        return;
+    if (_dialogueInstance != 0)
+        endDialogue();
+    _dialogueInstance = ++_instanceSequence;
+    _dialogueEmitted = false;
+    _dialogueKey.clear();
+    _dialogueFocusSeen = false;
+    _dialogueFocusText.clear();
+}
+
+void BlazonBridge::observeDialogue(int npcId, std::string_view name, std::string_view body,
+                                   const std::vector<std::string> &options, int highlighted) {
+    if (!_enabled || _dialogueInstance == 0)
+        return;
+    std::string instance = "mm7/dialogue/" + std::to_string(_dialogueInstance);
+    std::string subjectId = "mm7/npc/" + std::to_string(npcId);
+    std::string subjectName = stripFontCodes(name);
+    std::string plainBody = stripFontCodes(body);
+    std::string optionText;
+    for (const std::string &option : options) {
+        std::string plain = stripFontCodes(option);
+        if (plain.empty())
+            continue;
+        if (!optionText.empty())
+            optionText += ", ";
+        optionText += plain;
+    }
+    if (plainBody.empty())
+        plainBody = "No message";
+    if (optionText.empty())
+        optionText = "none";
+
+    std::string key = subjectName + "\x1f" + plainBody + "\x1f" + optionText;
+    if (key != _dialogueKey) {
+        std::string collection = instance + "/state";
+        Json fields = Json::array();
+        fields.push_back(makeTextField(instance, collection, "dialogue_instance", subjectId, "body",
+                                       "GUIWindow_Dialogue::Update dialogue_string", "GUIWindow_Dialogue::Update", plainBody));
+        fields.push_back(makeTextField(instance, collection, "dialogue_instance", subjectId, "options",
+                                       "GUIButton::label per dialogue option", "GUIWindow_Dialogue::Update", optionText));
+        if (sendTransaction(makeCollection(_sourceRun, instance, collection, "dialogue_instance", kDialogueCollectionKind,
+                                           subjectId, "npc", "speakingNpcId", subjectName, "GUIWindow_Dialogue::Update",
+                                           std::move(fields)))) {
+            _dialogueEmitted = true;
+            _dialogueKey = key;
+        }
+    }
+
+    // The highlight follows the pointer. The first observation is the opening state and is not spoken on its own.
+    std::string focus = highlighted >= 0 && highlighted < static_cast<int>(options.size())
+                        ? stripFontCodes(options[highlighted]) : std::string();
+    if (!_dialogueFocusSeen) {
+        _dialogueFocusSeen = true;
+        _dialogueFocusText = focus;
+        return;
+    }
+    if (focus.empty() || focus == _dialogueFocusText)
+        return;
+    std::string collection = instance + "/focus";
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "dialogue_instance", subjectId, "option",
+                                   "GUIWindow::pCurrentPosActiveItem", "GUIWindow_Dialogue::Update", focus));
+    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "dialogue_instance", kDialogueFocusCollectionKind,
+                                       subjectId, "npc", "speakingNpcId", subjectName, "GUIWindow_Dialogue::Update",
+                                       std::move(fields))))
+        _dialogueFocusText = focus;
+}
+
+void BlazonBridge::endDialogue() {
+    if (!_enabled || _dialogueInstance == 0)
+        return;
+    if (_dialogueEmitted)
+        sendTransaction(makeEnd("dialogue_instance", "mm7/dialogue/" + std::to_string(_dialogueInstance)));
+    _dialogueInstance = 0;
+    _dialogueEmitted = false;
 }
 
 void BlazonBridge::observePopupHold(bool holding) {

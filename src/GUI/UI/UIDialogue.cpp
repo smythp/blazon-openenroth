@@ -1,3 +1,4 @@
+#include "GUI/UI/UIBlazon.h"
 #include "UIDialogue.h"
 
 #include <memory>
@@ -151,9 +152,11 @@ GUIWindow_Dialogue::GUIWindow_Dialogue(DialogWindowType type) : GUIWindow(WINDOW
     setKeyboardControlGroup(optionList.size(), false, 0, 1);
 
     CreateCharacterButtons();
+    BlazonBridge::instance().beginDialogue(speakingNpcId);
 }
 
 GUIWindow_Dialogue::~GUIWindow_Dialogue() {
+    BlazonBridge::instance().endDialogue();
     if (houseNpcs[0].icon) {
         houseNpcs[0].icon->release();
     }
@@ -274,6 +277,22 @@ void GUIWindow_Dialogue::Update() {
                 pButton->label = localization->str(LSTR_COLLECT_PRIZE);
             }
         }
+    }
+
+    if (BlazonBridge::instance().enabled()) {
+        std::vector<std::string> optionLabels;
+        int highlighted = -1;
+        for (int i = pDialogueWindow->pStartingPosActiveItem; i < pDialogueWindow->pStartingPosActiveItem + pDialogueWindow->pNumPresenceButton; ++i) {
+            GUIButton *pButton = pDialogueWindow->GetControl(i);
+            if (!pButton)
+                break;
+            if (pDialogueWindow->pCurrentPosActiveItem == i)
+                highlighted = static_cast<int>(optionLabels.size());
+            optionLabels.push_back(pButton->label);
+        }
+        if (pBtn_ExitCancel)
+            optionLabels.push_back(pBtn_ExitCancel->label);
+        BlazonBridge::instance().observeDialogue(speakingNpcId, NameAndTitle(pNPC), dialogue_string, optionLabels, highlighted);
     }
 
     // Install Buttons(Установка кнопок)--------

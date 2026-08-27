@@ -72,6 +72,21 @@ class BlazonBridge {
     void captureText(std::string_view text, bool title, int x, int y, int w, int h);
 
     /**
+     * NPC dialogue window lifecycle and content. The window observes once per
+     * frame after it has composed its body and option labels.
+     *
+     * @param npcId                     Speaking NPC id, the subject.
+     * @param name                      NPC name and title as drawn.
+     * @param body                      Dialogue body with font codes.
+     * @param options                   Option labels in screen order, exit button last.
+     * @param highlighted               Index into options of the highlighted one, or -1.
+     */
+    void beginDialogue(int npcId);
+    void observeDialogue(int npcId, std::string_view name, std::string_view body,
+                         const std::vector<std::string> &options, int highlighted);
+    void endDialogue();
+
+    /**
      * Explicit Blazon command from a key press.
      *
      * @param action                    "stop" or "read_collection".
@@ -124,6 +139,12 @@ class BlazonBridge {
 
     int _eventStamp = 0;
     uint64_t _eventInstance = 0;
+
+    uint64_t _dialogueInstance = 0;
+    bool _dialogueEmitted = false;
+    std::string _dialogueKey;
+    bool _dialogueFocusSeen = false;
+    std::string _dialogueFocusText;
 
     void sendHeartbeat();
 
