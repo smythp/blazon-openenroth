@@ -11,6 +11,7 @@
 
 #include "GUI/GUIFont.h"
 
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIGame.h"
 
 const std::string &StatusBar::get() {
@@ -22,6 +23,9 @@ const std::string &StatusBar::get() {
 }
 
 void StatusBar::draw() {
+    // Blazon observes the hover text once per frame here, in both game loops.
+    BlazonBridge::instance().observeStatus(_statusString);
+
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 
     const std::string &status = get();

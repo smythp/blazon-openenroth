@@ -22,6 +22,7 @@ set(GUI_UI_SOURCES
         UISaveLoad.cpp
         UISpell.cpp
         UIStatusBar.cpp
+        UIBlazon.cpp
         UITransition.cpp
         UIMessageScroll.cpp)
 
@@ -48,6 +49,7 @@ set(GUI_UI_HEADERS
         UISaveLoad.h
         UISpell.h
         UIStatusBar.h
+        UIBlazon.h
         UITransition.h
         UIMessageScroll.h)
 
@@ -61,6 +63,7 @@ target_link_libraries(gui_ui
         arcomage
         core_serialization
         engine_spells
+        library_json
         utility)
 
 add_subdirectory(Books)
