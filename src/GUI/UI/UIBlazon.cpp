@@ -26,7 +26,9 @@ constexpr const char *kSchema = "blazon.semantic-pieces/draft-1";
 constexpr const char *kBuild = "8673e3e7+blazon-pointer";
 constexpr const char *kPointerCollectionKind = "mm7.under_pointer.state";
 constexpr const char *kPopupCollectionKind = "mm7.popup.state";
+constexpr const char *kEventCollectionKind = "mm7.status_event.state";
 constexpr const char *kSubjectId = "mm7/pointer";
+constexpr const char *kGameSubjectId = "mm7/game";
 
 Json makeLifetime(const char *kind, const std::string &id) {
     return Json{{"kind", kind}, {"id", id}};
@@ -49,31 +51,34 @@ Json makePieceBase(const std::string &id, const char *kind, const Json &lifetime
 }
 
 Json makeField(const std::string &instance, const std::string &collection, const char *lifetimeKind,
-               const char *key, const char *origin, const char *hook, Json value) {
+               const char *subjectId, const char *key, const char *origin, const char *hook, Json value) {
     Json field = makePieceBase(instance + "/field/" + key, "field", makeLifetime(lifetimeKind, instance), origin, hook);
     field["key"] = key;
     field["authority_scope"] = "collection";
-    field["relationships"] = Json{{"collection", collection}, {"subject", kSubjectId}};
+    field["relationships"] = Json{{"collection", collection}, {"subject", subjectId}};
     field["value"] = std::move(value);
     return field;
 }
 
-Json makeSubject(const std::string &sourceRun, const char *hook) {
-    Json subject = makePieceBase(kSubjectId, "pointer", makeLifetime("game_session", sourceRun), "Io::Mouse", hook);
-    subject["value"] = Json{{"type", "text"}, {"text", "pointer"}};
+Json makeSubject(const std::string &sourceRun, const char *subjectId, const char *subjectKind, const char *origin,
+                 const char *hook) {
+    Json subject = makePieceBase(subjectId, subjectKind, makeLifetime("game_session", sourceRun), origin, hook);
+    subject["value"] = Json{{"type", "text"}, {"text", subjectKind}};
     return subject;
 }
 
 // One complete text collection: the subject plus a text field and a kind field.
 std::string makeTextCollection(const std::string &sourceRun, const std::string &instance, const char *lifetimeKind,
-                               const char *collectionKind, const char *origin, const char *hook,
+                               const char *collectionKind, const char *subjectId, const char *subjectKind,
+                               const char *subjectOrigin, const char *origin, const char *hook,
                                const std::string &text, const char *kindCode) {
     std::string collection = instance + "/state";
-    Json upsert = Json{{"op", "upsert"}, {"pieces", Json::array({makeSubject(sourceRun, hook)})}};
+    Json upsert = Json{{"op", "upsert"},
+                       {"pieces", Json::array({makeSubject(sourceRun, subjectId, subjectKind, subjectOrigin, hook)})}};
     Json fields = Json::array();
-    fields.push_back(makeField(instance, collection, lifetimeKind, "text", origin, hook,
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId, "text", origin, hook,
                                Json{{"type", "text"}, {"text", text}, {"display", text}}));
-    fields.push_back(makeField(instance, collection, lifetimeKind, "kind", origin, hook,
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId, "kind", origin, hook,
                                Json{{"type", "enum"}, {"code", kindCode}, {"display", kindCode}}));
     Json replace = Json{
         {"op", "replace"},
@@ -81,7 +86,7 @@ std::string makeTextCollection(const std::string &sourceRun, const std::string &
             {"id", collection},
             {"kind", collectionKind},
             {"complete", true},
-            {"subject", kSubjectId},
+            {"subject", subjectId},
             {"lifetime", makeLifetime(lifetimeKind, instance)},
         }},
         {"pieces", fields},
@@ -183,6 +188,7 @@ void BlazonBridge::beginPointer(const std::string &text) {
     uint64_t number = ++_instanceSequence;
     std::string instance = "mm7/under-pointer/" + std::to_string(number);
     std::string operations = makeTextCollection(_sourceRun, instance, "hover_instance", kPointerCollectionKind,
+                                                kSubjectId, "pointer", "Io::Mouse",
                                                 "StatusBar::_statusString", "StatusBar::draw", text, "status");
     if (sendTransaction(operations))
         _currentInstance = number;
@@ -192,6 +198,34 @@ void BlazonBridge::endPointer() {
     std::string instance = "mm7/under-pointer/" + std::to_string(_currentInstance);
     sendTransaction(makeEnd("hover_instance", instance));
     _currentInstance = 0;
+}
+
+void BlazonBridge::observeEvent(std::string_view text, int stamp) {
+    if (!_enabled)
+        return;
+    if (stamp == _eventStamp)
+        return;
+    _eventStamp = stamp;
+    if (_eventInstance != 0)
+        endEvent();
+    if (stamp != 0 && !text.empty())
+        beginEvent(std::string(text));
+}
+
+void BlazonBridge::beginEvent(const std::string &text) {
+    uint64_t number = ++_instanceSequence;
+    std::string instance = "mm7/status-event/" + std::to_string(number);
+    std::string operations = makeTextCollection(_sourceRun, instance, "event_instance", kEventCollectionKind,
+                                                kGameSubjectId, "game", "Engine",
+                                                "StatusBar::_eventStatusString", "StatusBar::draw", text, "event");
+    if (sendTransaction(operations))
+        _eventInstance = number;
+}
+
+void BlazonBridge::endEvent() {
+    std::string instance = "mm7/status-event/" + std::to_string(_eventInstance);
+    sendTransaction(makeEnd("event_instance", instance));
+    _eventInstance = 0;
 }
 
 void BlazonBridge::observePopupHold(bool holding) {
@@ -281,6 +315,7 @@ void BlazonBridge::endPopupFrame() {
 void BlazonBridge::emitPopup(const std::string &text) {
     std::string instance = "mm7/popup/" + std::to_string(_popupInstance);
     std::string operations = makeTextCollection(_sourceRun, instance, "popup_instance", kPopupCollectionKind,
+                                                kSubjectId, "pointer", "Io::Mouse",
                                                 "GUIWindow::DrawText", "UI_OnMouseRightClick", text, "unknown");
     if (sendTransaction(operations)) {
         _popupEmitted = true;

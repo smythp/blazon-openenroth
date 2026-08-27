@@ -25,6 +25,8 @@ const std::string &StatusBar::get() {
 void StatusBar::draw() {
     // Blazon observes the hover text once per frame here, in both game loops.
     BlazonBridge::instance().observeStatus(_statusString);
+    BlazonBridge::instance().observeEvent(_eventStatusExpireTime ? std::string_view(_eventStatusString) : std::string_view(),
+                                          _eventStatusExpireTime);
 
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 

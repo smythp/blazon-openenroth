@@ -35,6 +35,16 @@ class BlazonBridge {
     void observeStatus(std::string_view text);
 
     /**
+     * Per-frame observation of the status bar's timed event message, the
+     * channel behind "Game Saved!", "Nothing here" and similar feedback. Each
+     * new message is a new event instance even when its text repeats.
+     *
+     * @param text                      Event text, empty when no event is showing.
+     * @param stamp                     The event's expiry tick, zero when none is showing.
+     */
+    void observeEvent(std::string_view text, int stamp);
+
+    /**
      * Per-frame observation of the right-button hold. A rising edge begins a
      * popup instance, a falling edge ends it.
      *
@@ -88,6 +98,8 @@ class BlazonBridge {
     void emitPopup(const std::string &text);
     void endPopup();
     void emitRawDraw(std::string_view text, int x, int y, int w, int h);
+    void beginEvent(const std::string &text);
+    void endEvent();
 
     std::string _socketPath;
     std::string _sourceRun;
@@ -108,6 +120,9 @@ class BlazonBridge {
     std::string _popupText;
     std::vector<std::string> _popupTitles;
     std::vector<std::string> _popupBody;
+
+    int _eventStamp = 0;
+    uint64_t _eventInstance = 0;
 
     uint64_t _frame = 0;
     uint64_t _rawSequence = 0;
