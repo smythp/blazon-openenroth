@@ -22,6 +22,7 @@
 #include "Engine/Time/Timer.h"
 
 #include "GUI/GUIWindow.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/GUIMessageQueue.h"
 
 #include "Io/InputEnums.h"
@@ -287,6 +288,15 @@ extern InputAction currently_selected_action_for_binding;
 void GameWindowHandler::OnKey(PlatformKey key) {
     if (!keyboardInputHandler || !keyboardActionMapping)
         return;
+
+    // Blazon keys are fixed for now, F3 stops speech and F4 reads what is under the pointer.
+    if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F3) {
+        BlazonBridge::instance().sendInput("stop");
+        return;
+    } else if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F4) {
+        BlazonBridge::instance().sendInput("read_collection");
+        return;
+    }
 
     // TODO: many of hardcoded keys below should be moved out of there and made configurable
     if (keyboardActionMapping->isBound(INPUT_ACTION_TAKE_SCREENSHOT, key)) {

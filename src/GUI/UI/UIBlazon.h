@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /**
  * Blazon bridge for OpenEnroth.
@@ -10,11 +11,12 @@
  * Inert unless the BLAZON_SOCKET environment variable names a Unix datagram
  * socket that a Blazon runtime is listening on. Emits evidence-bearing
  * semantic pieces (schema blazon.semantic-pieces/draft-1) exactly as the
- * ScummVM Xeen bridge does; it never speaks and never reads input.
+ * ScummVM Xeen bridge does. It never speaks and never reads game input.
  *
- * First scope, 2026-08-27: the text under the pointer, observed once per
- * frame at the status bar. This chokepoint carries the string only; the
- * identity-bearing hooks in GameUI_WritePointedObjectStatusString come next.
+ * Scopes so far: the text under the pointer, observed once per frame at the
+ * status bar, and the right-click popup, captured from the strings the popup
+ * draws while the button is held. Both are string chokepoints. Identity from
+ * the hover resolver and the popup composers comes next.
  */
 class BlazonBridge {
  public:
@@ -24,10 +26,47 @@ class BlazonBridge {
 
     /**
      * Per-frame observation of the permanent (hover) status-bar text. A change
-     * of text ends the previous hover instance and begins a new one; an empty
+     * of text ends the previous hover instance and begins a new one. An empty
      * text ends the current instance without beginning another.
+     *
+     * @param text                      Current permanent status-bar text.
      */
     void observeStatus(std::string_view text);
+
+    /**
+     * Per-frame observation of the right-button hold. A rising edge begins a
+     * popup instance, a falling edge ends it.
+     *
+     * @param holding                   Whether the right button is held this frame.
+     */
+    void observePopupHold(bool holding);
+
+    /** Brackets the popup dispatcher so text drawn inside it is captured. */
+    void beginPopupFrame();
+    void endPopupFrame();
+
+    /**
+     * Text drawn by the engine. Captured only inside a popup frame.
+     *
+     * @param text                      Raw text with font control codes.
+     * @param title                     Whether this came from DrawTitleText.
+     */
+    void captureText(std::string_view text, bool title);
+
+    /**
+     * Explicit Blazon command from a key press.
+     *
+     * @param action                    "stop" or "read_collection".
+     */
+    void sendInput(const char *action);
+
+    /**
+     * Plain text of a font-formatted string, control codes removed.
+     *
+     * @param text                      Text with \f, \t, \r, \n codes.
+     * @return                          Text without codes, positioning codes become spaces.
+     */
+    static std::string stripFontCodes(std::string_view text);
 
  private:
     BlazonBridge();
@@ -39,6 +78,8 @@ class BlazonBridge {
     bool sendTransaction(const std::string &operationsJson);
     void beginPointer(const std::string &text);
     void endPointer();
+    void emitPopup(const std::string &text);
+    void endPopup();
 
     std::string _socketPath;
     std::string _sourceRun;
@@ -46,7 +87,17 @@ class BlazonBridge {
     bool _enabled = false;
     bool _warned = false;
     uint64_t _transactionSequence = 0;
+    uint64_t _inputSequence = 0;
     uint64_t _instanceSequence = 0;
+
     uint64_t _currentInstance = 0;
     std::string _currentText;
+
+    bool _popupHolding = false;
+    bool _inPopupFrame = false;
+    uint64_t _popupInstance = 0;
+    bool _popupEmitted = false;
+    std::string _popupText;
+    std::vector<std::string> _popupTitles;
+    std::vector<std::string> _popupBody;
 };

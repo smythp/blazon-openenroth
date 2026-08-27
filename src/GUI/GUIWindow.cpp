@@ -33,6 +33,7 @@
 #include "GUI/GUIFont.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/UICharacter.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIGame.h"
 #include "GUI/UI/UIHouses.h"
 #include "GUI/UI/UIPopup.h"
@@ -323,6 +324,7 @@ void GUIWindow::DrawTitleText(GUIFont *pFont, int horizontalMargin, int vertical
     if (engine->callObserver) {
         engine->callObserver->notify(CALL_GUIWINDOW_DRAWTEXT, std::string(text));
     }
+    BlazonBridge::instance().captureText(text, true);
     int width = frameRect.w - horizontalMargin;
     std::string resString = pFont->WrapText(text, frameRect.w, horizontalMargin);
     std::istringstream stream(resString);
@@ -362,6 +364,7 @@ void GUIWindow::DrawText(GUIFont *font, Pointi position, Color color, std::strin
     if (engine->callObserver) {
         engine->callObserver->notify(CALL_GUIWINDOW_DRAWTEXT, std::string(text));
     }
+    BlazonBridge::instance().captureText(text, false);
     font->DrawText(frameRect, position, color, text, maxY, shadowColor);
 }
 
@@ -572,9 +575,12 @@ void GUI_UpdateWindows() {
         GameUI_DrawFoodAndGold();
     }
 
+    BlazonBridge::instance().observePopupHold(isHoldingMouseRightButton());
     if (isHoldingMouseRightButton()) {
         std::shared_ptr<Io::Mouse> mouse = EngineIocContainer::ResolveMouse();
+        BlazonBridge::instance().beginPopupFrame();
         UI_OnMouseRightClick(mouse->position());
+        BlazonBridge::instance().endPopupFrame();
     }
 }
 
