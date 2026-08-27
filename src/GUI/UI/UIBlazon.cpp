@@ -368,29 +368,21 @@ bool BlazonBridge::sendDatagram(const std::string &payload) {
         int flags = fcntl(_socket, F_GETFL, 0);
         if (flags >= 0)
             fcntl(_socket, F_SETFL, flags | O_NONBLOCK);
-        sockaddr_un address{};
-        address.sun_family = AF_UNIX;
-        std::strncpy(address.sun_path, _socketPath.c_str(), sizeof(address.sun_path) - 1);
-        if (connect(_socket, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0) {
-            if (!_warned) {
-                MM_LOG(LOG_WARNING, "Blazon: cannot connect to {}: {}", _socketPath, std::strerror(errno));
-                _warned = true;
-            }
-            close(_socket);
-            _socket = -1;
-            return false;
-        }
-        _warned = false;
     }
-    ssize_t sent = send(_socket, payload.data(), payload.size(), MSG_DONTWAIT);
+    // Unconnected sends address the path every time, so a runtime that restarts
+    // and rebinds the same path keeps receiving without the game noticing.
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    std::strncpy(address.sun_path, _socketPath.c_str(), sizeof(address.sun_path) - 1);
+    ssize_t sent = sendto(_socket, payload.data(), payload.size(), MSG_DONTWAIT,
+                          reinterpret_cast<const sockaddr *>(&address), sizeof(address));
     if (sent != static_cast<ssize_t>(payload.size())) {
         if (!_warned) {
-            MM_LOG(LOG_WARNING, "Blazon: datagram send failed: {}", std::strerror(errno));
+            MM_LOG(LOG_WARNING, "Blazon: datagram to {} failed: {}", _socketPath, std::strerror(errno));
             _warned = true;
         }
-        close(_socket);
-        _socket = -1;
         return false;
     }
+    _warned = false;
     return true;
 }
