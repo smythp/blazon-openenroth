@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -124,7 +125,12 @@ class BlazonBridge {
     int _eventStamp = 0;
     uint64_t _eventInstance = 0;
 
+    void sendHeartbeat();
+
     uint64_t _frame = 0;
     uint64_t _rawSequence = 0;
+    std::time_t _startedAt = 0;
+    std::time_t _lastHeartbeat = 0;
+    int _heartbeatSeconds = 5;
     std::unordered_map<std::string, uint64_t> _rawSeen;
 };

@@ -133,8 +133,31 @@ BlazonBridge::BlazonBridge() {
     char stamp[32];
     std::strftime(stamp, sizeof(stamp), "%Y%m%dT%H%M%S", &utc);
     _sourceRun = std::string("openenroth-mm7:") + stamp + ":pid" + std::to_string(getpid());
+    _startedAt = now;
+    // BLAZON_HEARTBEAT_SECONDS=0 silences the liveness pings once the loop is stable.
+    if (const char *heartbeat = std::getenv("BLAZON_HEARTBEAT_SECONDS"))
+        _heartbeatSeconds = std::atoi(heartbeat);
     _enabled = true;
-    MM_LOG(LOG_INFO, "Blazon: bridge enabled, socket {}, source run {}", _socketPath, _sourceRun);
+    MM_LOG(LOG_INFO, "Blazon: bridge enabled, socket {}, source run {}, heartbeat {}s", _socketPath, _sourceRun,
+           _heartbeatSeconds);
+}
+
+void BlazonBridge::sendHeartbeat() {
+    std::time_t now = std::time(nullptr);
+    if (_heartbeatSeconds <= 0 || now - _lastHeartbeat < _heartbeatSeconds)
+        return;
+    _lastHeartbeat = now;
+    Json heartbeat = Json{
+        {"type", "heartbeat"},
+        {"source_run", _sourceRun},
+        {"uptime_seconds", static_cast<long long>(now - _startedAt)},
+        {"frame", _frame},
+        {"screen", static_cast<int>(current_screen_type)},
+        {"transactions_sent", _transactionSequence},
+        {"raw_draws_sent", _rawSequence},
+        {"inputs_sent", _inputSequence},
+    };
+    sendDatagram(heartbeat.dump());
 }
 
 BlazonBridge::~BlazonBridge() {
@@ -232,6 +255,7 @@ void BlazonBridge::observePopupHold(bool holding) {
     if (!_enabled)
         return;
     ++_frame;
+    sendHeartbeat();
     if (holding && !_popupHolding) {
         _popupHolding = true;
         _popupInstance = ++_instanceSequence;
