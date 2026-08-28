@@ -30,6 +30,7 @@
 #include "GUI/GUIButton.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/ItemGrid.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIInventory.h"
 
 #include "Io/Mouse.h"
@@ -596,6 +597,10 @@ GUIWindow_CharacterRecord::GUIWindow_CharacterRecord(int uActiveCharacter, Scree
     scrollstop = assets->getImage_ColorKey("con_x");
 }
 
+GUIWindow_CharacterRecord::~GUIWindow_CharacterRecord() {
+    BlazonBridge::instance().endCharacterRecord();
+}
+
 void GUIWindow_CharacterRecord::releaseAwardsScrollBar() {
     if (_awardsScrollBarCreated) {
         _awardsScrollBarCreated = false;
@@ -675,6 +680,8 @@ void GUIWindow_CharacterRecord::Update() {
         CharacterUI_DrawPaperdollWithRingOverlay(player);
     else
         CharacterUI_DrawPaperdoll(player);
+
+    BlazonBridge::instance().observeCharacterRecord(*this);
 }
 
 void GUIWindow_CharacterRecord::ShowStatsTab() {
@@ -849,7 +856,7 @@ void GUIWindow_CharacterRecord::CharacterUI_SkillsTab_Draw(Character *player) {
     y = drawSkillTable(player, 248, y, allMiscSkills(), 177, localization->str(LSTR_MISC));
 }
 
-std::string GUIWindow_CharacterRecord::getAchievedAwardsString(int idx) {
+std::string GUIWindow_CharacterRecord::getAchievedAwardsString(int idx) const {
     std::string str;
 
     // TODO(captainurist): fmt can throw
@@ -933,12 +940,15 @@ void GUIWindow_CharacterRecord::CharacterUI_AwardsTab_Draw(Character *player) {
         fillAwardsData();
     }
 
+    _blazonAwardRows.clear();
     int currentlyDisplayedElems = 0;
     for (int i = _startAwardElem; i < _achievedAwardsList.size(); ++i) {
         std::string str = getAchievedAwardsString(i);
 
         GUIWindow::DrawText(assets->pFontArrus.get(), {0, 0}, ui_character_award_color[pAwards[_achievedAwardsList[i]].uPriority % 6], str, window);
-        window.y = assets->pFontArrus->CalcTextHeight(str, window.w, 0) + window.y + 8;
+        int textHeight = assets->pFontArrus->CalcTextHeight(str, window.w, 0);
+        _blazonAwardRows.push_back({Recti(window.x, window.y, window.w, textHeight), str});
+        window.y = textHeight + window.y + 8;
         currentlyDisplayedElems++;
         if (window.y > window.h) {
             break;

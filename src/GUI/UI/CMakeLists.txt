@@ -50,6 +50,7 @@ set(GUI_UI_HEADERS
         UISpell.h
         UIStatusBar.h
         UIBlazon.h
+        UIBlazonCharacterRecord.h
         UIBlazonPartyCreation.h
         UIBlazonPortraits.h
         UITransition.h
@@ -74,6 +75,7 @@ add_subdirectory(Houses)
 if(OE_BUILD_TESTS)
     set(TEST_GUI_UI_SOURCES
             Tests/UIBlazon_ut.cpp
+            Tests/UIBlazonCharacterRecord_ut.cpp
             Tests/UIBlazonPartyCreation_ut.cpp
             Tests/UIBlazonPortraits_ut.cpp)
 
