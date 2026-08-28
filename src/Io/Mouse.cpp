@@ -30,6 +30,12 @@
 
 std::shared_ptr<Io::Mouse> mouse = nullptr;
 
+static void drawScaledCursor(GraphicsImage *image, Pointi position, int scale, Color color = colorTable.White) {
+    Recti source(0, 0, image->width(), image->height());
+    Recti destination(position.x, position.y, image->width() * scale, image->height() * scale);
+    render->DrawQuad2D(image, source, destination, color);
+}
+
 Pointi Io::Mouse::position() const {
     return _position;
 }
@@ -110,6 +116,7 @@ void Io::Mouse::Initialize() {
 void Io::Mouse::DrawCursor() {
     // get mouse pos
     Pointi pos = this->position();
+    int cursorScale = engine->config->graphics.CursorScale.value();
 
     // manage mouse look state - if only game screen is active and no overlay (console) is open, try enable
     if (lWindowList.size() == 1 && !engine->isOverlayOpen())
@@ -127,14 +134,15 @@ void Io::Mouse::DrawCursor() {
         if (this->cursor_img) {
             platform->setCursorShown(false);
             // draw image - needs centering
-            pos.x -= (this->cursor_img->width()) / 2;
-            pos.y -= (this->cursor_img->height()) / 2;
+            Sizei cursorSize(this->cursor_img->width() * cursorScale, this->cursor_img->height() * cursorScale);
+            pos = pos - cursorSize / 2;
 
-            render->DrawQuad2D(this->cursor_img, pos);
+            drawScaledCursor(this->cursor_img, pos, cursorScale);
         } else if (_mouseLook == MouseLookState::Enabled) {
             platform->setCursorShown(false);
             auto pointer = assets->getImage_ColorKey("MICON2", colorTable.Black /*colorTable.TealMask*/);
-            render->DrawQuad2D(pointer, pViewport.center() - pointer->size() / 2);
+            Sizei cursorSize(pointer->width() * cursorScale, pointer->height() * cursorScale);
+            drawScaledCursor(pointer, pViewport.center() - cursorSize / 2, cursorScale);
         } else {
             platform->setCursorShown(true);
         }
@@ -198,13 +206,14 @@ void Io::Mouse::DrawPickedItem() {
 
     Pointi mousePos = this->position();
     Pointi drawPos = {mousePos.x + pickedItemOffset.x, mousePos.y + pickedItemOffset.y};
+    int cursorScale = engine->config->graphics.CursorScale.value();
 
     if (pParty->pPickedItem.IsBroken()) {
-        render->DrawQuad2D(pTexture, drawPos, colorTable.Red);
+        drawScaledCursor(pTexture, drawPos, cursorScale, colorTable.Red);
     } else if (!pParty->pPickedItem.IsIdentified()) {
-        render->DrawQuad2D(pTexture, drawPos, colorTable.Green);
+        drawScaledCursor(pTexture, drawPos, cursorScale, colorTable.Green);
     } else {
-        render->DrawQuad2D(pTexture, drawPos);
+        drawScaledCursor(pTexture, drawPos, cursorScale);
     }
 }
 

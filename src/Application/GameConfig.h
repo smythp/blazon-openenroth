@@ -472,6 +472,8 @@ class GameConfig : public Config {
         Bool AlwaysCustomCursor = {this, "always_custom_cursor", false,
             "Always draw a custom cursor using the graphics API and hide the system cursor, even if it's the default mouse arrow cursor."};
 
+        Int CursorScale = {this, "cursor_scale", 1, &ValidateCursorScale, "Scale factor for game-drawn cursors."};
+
         Bool GenerateTiles = {this, "generate_tiles", true,
             "Auto-generate missing tiles on startup and use them where appropriate. MM7 missed some tile transitions, this option fixes this issue."};
 
@@ -482,6 +484,9 @@ class GameConfig : public Config {
      private:
         static int ValidateGamma(int level) {
             return std::clamp(level, 0, 9);
+        }
+        static int ValidateCursorScale(int scale) {
+            return std::clamp(scale, 1, 8);
         }
         static int ValidateMaxSectors(int sectors) {
             return std::clamp(sectors, 1, 150);
