@@ -104,6 +104,7 @@ static constexpr IndexedArray<Mastery, HOUSE_FIRST_MAGIC_GUILD, HOUSE_LAST_MAGIC
 };
 
 static BlazonWare blazonGuildWare(Item &item, HouseId houseId) {
+    assert(isSpellbook(item.itemId));
     SpellId spell = spellForSpellbook(item.itemId);
     BlazonWare result;
     result.name = item.GetDisplayName();
@@ -191,9 +192,10 @@ void GUIWindow_MagicGuild::buyBooksDialogue() {
     }
 
     if (checkIfPlayerCanInteract()) {
-        BlazonBridge::instance().observeHouseWares(
-            blazonGuildShelf(houseId(), itemAmountInShop[buildingType()]),
-            "GUIWindow_MagicGuild::buyBooksDialogue");
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled())
+            blazon.observeHouseWares(blazonGuildShelf(houseId(), itemAmountInShop[buildingType()]),
+                                     "GUIWindow_MagicGuild::buyBooksDialogue");
         int itemcount = 0;
         for (int i = 0; i < itemAmountInShop[buildingType()]; ++i) {
             if (pParty->spellBooksInGuilds[houseId()][i].itemId != ITEM_NULL)
@@ -227,9 +229,9 @@ void GUIWindow_MagicGuild::buyBooksDialogue() {
 
                 if (pt.x >= testpos && pt.x <= testpos + (shop_ui_items_in_store[testx]->width())) {
                     if ((pt.y >= 90 && pt.y <= (90 + (shop_ui_items_in_store[testx]->height()))) || (pt.y >= 250 && pt.y <= (250 + (shop_ui_items_in_store[testx]->height())))) {
-                        BlazonBridge::instance().observeHouseWare(
-                            blazonGuildWare(*item, houseId()),
-                            "GUIWindow_MagicGuild::buyBooksDialogue");
+                        if (blazon.enabled())
+                            blazon.observeHouseWare(blazonGuildWare(*item, houseId()),
+                                                    "GUIWindow_MagicGuild::buyBooksDialogue");
                         MerchantPhrase phrase = pParty->activeCharacter().SelectPhrasesTransaction(item, HOUSE_TYPE_MAGIC_SHOP, houseId(), SHOP_SCREEN_BUY);
                         std::string str = BuildDialogueString(pMerchantsBuyPhrases[phrase], pParty->activeCharacterIndex() - 1, houseNpcs[currentHouseNpc].npc, item, houseId(), SHOP_SCREEN_BUY);
                         int textHeight = assets->pFontArrus->CalcTextHeight(str, working_window.w, 0);
