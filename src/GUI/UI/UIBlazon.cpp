@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "GUI/GUIWindow.h"
 
 #include "Library/Logger/Logger.h"
+#include "Utility/String/Format.h"
 
 namespace {
 
@@ -172,7 +174,10 @@ BlazonBridge::BlazonBridge() {
     gmtime_r(&now, &utc);
     char stamp[32];
     std::strftime(stamp, sizeof(stamp), "%Y%m%dT%H%M%S", &utc);
-    _sourceRun = std::string("openenroth-mm7:") + stamp + ":pid" + std::to_string(getpid());
+    std::random_device randomDevice;
+    std::uniform_int_distribution<uint64_t> tokenDistribution;
+    std::string token = fmt::format("{:016x}", tokenDistribution(randomDevice));
+    _sourceRun = std::string("openenroth-mm7:") + stamp + ":pid" + std::to_string(getpid()) + ":random" + token;
     _startedAt = now;
     // BLAZON_HEARTBEAT_SECONDS=0 silences the liveness pings once the loop is stable.
     if (const char *heartbeat = std::getenv("BLAZON_HEARTBEAT_SECONDS"))
