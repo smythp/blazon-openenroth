@@ -330,6 +330,16 @@ std::string BlazonBridge::stripFontCodes(std::string_view text) {
     return gameTextToUtf8(start == std::string::npos ? std::string_view() : std::string_view(result).substr(start));
 }
 
+std::vector<std::string> BlazonBridge::dialogueOptionLabels(std::vector<std::string> topics,
+                                                            std::string_view exitLabel) {
+    if (topics.empty()) {
+        topics.push_back(gameTextToUtf8("Close"));
+    } else {
+        topics.push_back(gameTextToUtf8(exitLabel));
+    }
+    return topics;
+}
+
 void BlazonBridge::observeStatus(std::string_view text) {
     if (!_enabled)
         return;

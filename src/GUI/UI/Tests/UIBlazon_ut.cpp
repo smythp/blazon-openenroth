@@ -1,4 +1,6 @@
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "Testing/Unit/UnitTest.h"
 
@@ -14,4 +16,15 @@ UNIT_TEST(UIBlazon, ValidUtf8PassesThrough) {
     std::string utf8 = "already UTF-8 \xe2\x80\x99 \xe2\x80\x93";
 
     EXPECT_EQ(BlazonBridge::stripFontCodes(utf8), utf8);
+}
+
+UNIT_TEST(UIBlazon, DialogueMessageHasOnlyClose) {
+    EXPECT_EQ(BlazonBridge::dialogueOptionLabels({}, "Exit"), std::vector<std::string>({"Close"}));
+}
+
+UNIT_TEST(UIBlazon, DialogueConversationEndsWithExit) {
+    std::vector<std::string> topics = {"More Information", "Hire"};
+
+    EXPECT_EQ(BlazonBridge::dialogueOptionLabels(std::move(topics), "Exit"),
+              std::vector<std::string>({"More Information", "Hire", "Exit"}));
 }

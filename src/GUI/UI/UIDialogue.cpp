@@ -2,6 +2,7 @@
 #include "UIDialogue.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 #include <string>
 
@@ -291,7 +292,7 @@ void GUIWindow_Dialogue::Update() {
             optionLabels.push_back(pButton->label);
         }
         if (pBtn_ExitCancel)
-            optionLabels.push_back(pBtn_ExitCancel->label);
+            optionLabels = BlazonBridge::dialogueOptionLabels(std::move(optionLabels), pBtn_ExitCancel->label);
         BlazonBridge::instance().observeDialogue(speakingNpcId, NameAndTitle(pNPC), dialogue_string, optionLabels, highlighted);
     }
 

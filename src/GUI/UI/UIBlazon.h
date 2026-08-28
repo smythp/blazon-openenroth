@@ -147,6 +147,18 @@ class BlazonBridge {
      */
     static std::string stripFontCodes(std::string_view text);
 
+    /**
+     * Labels spoken for an NPC dialogue's topic controls and final action.
+     * A dialogue without topics is a message window whose image-backed action
+     * reads "Close", while a conversation retains its localized exit label.
+     *
+     * @param topics                    Topic labels in screen order.
+     * @param exitLabel                 Localized label for leaving a conversation.
+     * @return                          Labels in spoken order, final action last.
+     */
+    static std::vector<std::string> dialogueOptionLabels(std::vector<std::string> topics,
+                                                         std::string_view exitLabel);
+
  private:
     BlazonBridge();
     ~BlazonBridge();
