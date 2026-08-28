@@ -15,6 +15,8 @@
 #include "Engine/Localization.h"
 #include "Engine/MapInfo.h"
 #include "Engine/Objects/Item.h"
+#include "Engine/Spells/SpellEnumFunctions.h"
+#include "Engine/Spells/Spells.h"
 #include "Engine/Party.h"
 #include "Engine/PriceCalculator.h"
 #include "Engine/Random/Random.h"
@@ -26,6 +28,7 @@
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/ItemGrid.h"
 #include "GUI/UI/UIHouses.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIStatusBar.h"
 
 #include "Io/Mouse.h"
@@ -33,6 +36,71 @@
 #include "Media/Audio/AudioPlayer.h"
 
 #include "Utility/IndexedArray.h"
+
+static BlazonWare blazonShopWare(Item &item, HouseId houseId, BlazonWareAction action) {
+    BlazonWare result;
+    result.name = item.GetDisplayName();
+    result.action = action;
+
+    bool service = action == BlazonWareAction::BLAZON_WARE_ACTION_SELL ||
+                   action == BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY ||
+                   action == BlazonWareAction::BLAZON_WARE_ACTION_REPAIR;
+    if (service && !item.canSellRepairIdentifyAt(houseId)) {
+        result.action = BlazonWareAction::BLAZON_WARE_ACTION_UNAVAILABLE;
+    } else if (action == BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY && item.IsIdentified()) {
+        result.action = BlazonWareAction::BLAZON_WARE_ACTION_ALREADY_IDENTIFIED;
+    } else if (action == BlazonWareAction::BLAZON_WARE_ACTION_REPAIR && !item.IsBroken()) {
+        result.action = BlazonWareAction::BLAZON_WARE_ACTION_NO_REPAIR_NEEDED;
+    }
+
+    float multiplier = houseTable[houseId].fPriceMultiplier;
+    switch (result.action) {
+      case BlazonWareAction::BLAZON_WARE_ACTION_BUY:
+        result.price = PriceCalculator::itemBuyingPriceForPlayer(&pParty->activeCharacter(), item.GetValue(), multiplier);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_SELL:
+        result.price = PriceCalculator::itemSellingPriceForPlayer(&pParty->activeCharacter(), item, multiplier);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY:
+        result.price = PriceCalculator::itemIdentificationPriceForPlayer(&pParty->activeCharacter(), multiplier);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_REPAIR:
+        result.price = PriceCalculator::itemRepairPriceForPlayer(&pParty->activeCharacter(), item.GetValue(), multiplier);
+        break;
+      default:
+        break;
+    }
+
+    if (isSpellbook(item.itemId)) {
+        SpellId spell = spellForSpellbook(item.itemId);
+        result.spellName = pSpellStats->pInfos[spell].name;
+        result.schoolName = localization->spellSchoolName(magicSchoolForSpell(spell));
+    }
+    return result;
+}
+
+static std::vector<BlazonWare> blazonShopShelf(std::array<Item, 12> &items, int count,
+                                               HouseId houseId, BlazonWareAction action) {
+    std::vector<BlazonWare> result;
+    for (int i = 0; i < count; ++i) {
+        if (items[i].itemId != ITEM_NULL)
+            result.push_back(blazonShopWare(items[i], houseId, action));
+    }
+    return result;
+}
+
+static std::vector<BlazonWare> blazonInventoryShelf(HouseId houseId, BlazonWareAction action) {
+    std::vector<BlazonWare> result;
+    CharacterInventory &inventory = pParty->activeCharacter().inventory;
+    for (int y = 0; y < inventory.gridSize().h; ++y) {
+        for (int x = 0; x < inventory.gridSize().w; ++x) {
+            InventoryEntry entry = inventory.entry(Pointi(x, y));
+            if (entry && entry.geometry().topLeft() == Pointi(x, y))
+                result.push_back(blazonShopWare(*entry, houseId, action));
+        }
+    }
+    return result;
+}
 
 struct ITEM_VARIATION {
     ItemTreasureLevel treasureLevel;
@@ -284,6 +352,10 @@ void GUIWindow_Shop::sellDialogue() {
 
     if (checkIfPlayerCanInteract()) {
         engine->_statusBar->drawForced(localization->str(LSTR_SELECT_THE_ITEM_TO_SELL), colorTable.White);
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled())
+            blazon.observeHouseWares(blazonInventoryShelf(houseId(), BlazonWareAction::BLAZON_WARE_ACTION_SELL),
+                                     "GUIWindow_Shop::sellDialogue");
 
         Pointi pt = mouse->position();
         if (pt.x <= 13 || pt.x >= 462)
@@ -292,6 +364,9 @@ void GUIWindow_Shop::sellDialogue() {
         Pointi gridPos = mapToInventoryGrid(pt, Pointi(14, 17));
 
         if (InventoryEntry entry = pParty->activeCharacter().inventory.entry(gridPos)) {
+            if (blazon.enabled())
+                blazon.observeHouseWare(blazonShopWare(*entry, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_SELL),
+                                        "GUIWindow_Shop::sellDialogue");
             MerchantPhrase phrases_id = pParty->activeCharacter().SelectPhrasesTransaction(entry.get(), buildingType(), houseId(), SHOP_SCREEN_SELL);
             std::string str = BuildDialogueString(pMerchantsSellPhrases[phrases_id], pParty->activeCharacterIndex() - 1, houseNpcs[currentHouseNpc].npc, entry.get(), houseId(), SHOP_SCREEN_SELL);
             int vertMargin = (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - assets->pFontArrus->CalcTextHeight(str, dialogwin.w, 0)) / 2 + SIDE_TEXT_BOX_BODY_TEXT_OFFSET;
@@ -310,6 +385,10 @@ void GUIWindow_Shop::identifyDialogue() {
 
     if (checkIfPlayerCanInteract()) {
         engine->_statusBar->drawForced(localization->str(LSTR_SELECT_THE_ITEM_TO_IDENTIFY), colorTable.White);
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled())
+            blazon.observeHouseWares(blazonInventoryShelf(houseId(), BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY),
+                                     "GUIWindow_Shop::identifyDialogue");
 
         Pointi pt = EngineIocContainer::ResolveMouse()->position();
         if (pt.x <= 13 || pt.x >= 462)
@@ -319,6 +398,9 @@ void GUIWindow_Shop::identifyDialogue() {
 
         if (InventoryEntry entry = pParty->activeCharacter().inventory.entry(gridPos)) {
             Item *item = entry.get();
+            if (blazon.enabled())
+                blazon.observeHouseWare(blazonShopWare(*item, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY),
+                                        "GUIWindow_Shop::identifyDialogue");
 
             std::string str;
             if (!item->IsIdentified()) {
@@ -345,6 +427,10 @@ void GUIWindow_Shop::repairDialogue() {
 
     if (checkIfPlayerCanInteract()) {
         engine->_statusBar->drawForced(localization->str(LSTR_SELECT_THE_ITEM_TO_REPAIR), colorTable.White);
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled())
+            blazon.observeHouseWares(blazonInventoryShelf(houseId(), BlazonWareAction::BLAZON_WARE_ACTION_REPAIR),
+                                     "GUIWindow_Shop::repairDialogue");
 
         Pointi pt = mouse->position();
         if (pt.x <= 13 || pt.x >= 462)
@@ -355,6 +441,10 @@ void GUIWindow_Shop::repairDialogue() {
         InventoryEntry entry = pParty->activeCharacter().inventory.entry(gridPos);
         if (!entry)
             return;
+
+        if (blazon.enabled())
+            blazon.observeHouseWare(blazonShopWare(*entry, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_REPAIR),
+                                    "GUIWindow_Shop::repairDialogue");
 
         if (entry->flags & ITEM_BROKEN) {
             Item *item = entry.get();
@@ -386,6 +476,12 @@ void GUIWindow_WeaponShop::shopWaresDialogue(bool isSpecial) {
     }
 
     if (checkIfPlayerCanInteract()) {
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled()) {
+            std::array<Item, 12> &items = isSpecial ? pParty->specialItemsInShops[houseId()] : pParty->standartItemsInShops[houseId()];
+            blazon.observeHouseWares(blazonShopShelf(items, 6, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                     "GUIWindow_WeaponShop::shopWaresDialogue");
+        }
         int item_num = 0;
         for (int i = 0; i < 6; ++i) {
             item_num += (isSpecial ? pParty->specialItemsInShops[houseId()][i].itemId : pParty->standartItemsInShops[houseId()][i].itemId) != ITEM_NULL;
@@ -414,6 +510,9 @@ void GUIWindow_WeaponShop::shopWaresDialogue(bool isSpecial) {
 
                     if (pt.x >= testpos && pt.x < (testpos + (shop_ui_items_in_store[testx]->width()))) {
                         if (pt.y >= weaponYPos[testx] + 30 && pt.y < (weaponYPos[testx] + 30 + (shop_ui_items_in_store[testx]->height()))) {
+                            if (blazon.enabled())
+                                blazon.observeHouseWare(blazonShopWare(*item, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                                        "GUIWindow_WeaponShop::shopWaresDialogue");
                             std::string str;
                             if (!isStealingModeActive()) {
                                 MerchantPhrase phrase = pParty->activeCharacter().SelectPhrasesTransaction(item, HOUSE_TYPE_WEAPON_SHOP, houseId(), SHOP_SCREEN_BUY);
@@ -459,6 +558,12 @@ void GUIWindow_ArmorShop::shopWaresDialogue(bool isSpecial) {
     }
 
     if (checkIfPlayerCanInteract()) {
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled()) {
+            std::array<Item, 12> &items = isSpecial ? pParty->specialItemsInShops[houseId()] : pParty->standartItemsInShops[houseId()];
+            blazon.observeHouseWares(blazonShopShelf(items, 8, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                     "GUIWindow_ArmorShop::shopWaresDialogue");
+        }
         int pItemCount = 0;
         for (int i = 0; i < 6; ++i) {
             pItemCount += (isSpecial ? pParty->specialItemsInShops[houseId()][i].itemId : pParty->standartItemsInShops[houseId()][i].itemId) != ITEM_NULL;
@@ -500,6 +605,10 @@ void GUIWindow_ArmorShop::shopWaresDialogue(bool isSpecial) {
                         if ((pt.y >= 126 && pt.y < (126 + (shop_ui_items_in_store[testx]->height()))) ||
                             (pt.y <= 98 && pt.y >= (98 - (shop_ui_items_in_store[testx]->height())))) {
                             // y is 126 to 126 + height low or 98-height to 98
+
+                            if (blazon.enabled())
+                                blazon.observeHouseWare(blazonShopWare(*item, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                                        "GUIWindow_ArmorShop::shopWaresDialogue");
 
                             std::string str;
                             if (!isStealingModeActive()) {
@@ -561,6 +670,12 @@ void GUIWindow_MagicAlchemyShop::shopWaresDialogue(bool isSpecial) {
     }
 
     if (checkIfPlayerCanInteract()) {
+        BlazonBridge &blazon = BlazonBridge::instance();
+        if (blazon.enabled()) {
+            std::array<Item, 12> &items = isSpecial ? pParty->specialItemsInShops[houseId()] : pParty->standartItemsInShops[houseId()];
+            blazon.observeHouseWares(blazonShopShelf(items, 12, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                     "GUIWindow_MagicAlchemyShop::shopWaresDialogue");
+        }
         int item_num = 0;
 
         for (int i = 0; i < 12; ++i) {
@@ -603,6 +718,10 @@ void GUIWindow_MagicAlchemyShop::shopWaresDialogue(bool isSpecial) {
                         if ((pt.y <= 308 && pt.y >= (308 - (shop_ui_items_in_store[testx]->height()))) ||
                             (pt.y <= 152 && pt.y >= (152 - (shop_ui_items_in_store[testx]->height())))) {
                             // y is 152-h to 152 or 308-height to 308
+
+                            if (blazon.enabled())
+                                blazon.observeHouseWare(blazonShopWare(*item, houseId(), BlazonWareAction::BLAZON_WARE_ACTION_BUY),
+                                                        "GUIWindow_MagicAlchemyShop::shopWaresDialogue");
 
                             std::string str;
                             if (!isStealingModeActive()) {

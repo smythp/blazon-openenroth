@@ -55,6 +55,8 @@ constexpr const char *kPopupCollectionKind = "mm7.popup.state";
 constexpr const char *kEventCollectionKind = "mm7.status_event.state";
 constexpr const char *kHouseCollectionKind = "mm7.house.state";
 constexpr const char *kHouseFocusCollectionKind = "mm7.house_focus.state";
+constexpr const char *kHouseWaresCollectionKind = "mm7.house_wares.state";
+constexpr const char *kHouseWareFocusCollectionKind = "mm7.house_ware_focus.state";
 constexpr const char *kMessageCollectionKind = "mm7.message.state";
 constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
 constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
@@ -690,6 +692,11 @@ void BlazonBridge::beginHouseFrame(int houseId, std::string_view houseName) {
         _houseFocusOperations.clear();
     }
     _inHouseFrame = true;
+    _houseWaresSeenInFrame = false;
+    _houseWareSeenInFrame = false;
+    _houseFrameWares.clear();
+    _houseWaresHook.clear();
+    _houseWareFocusHook.clear();
     _houseTitles.clear();
     _houseBody.clear();
 }
@@ -698,8 +705,10 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     if (!_inHouseFrame)
         return;
     _inHouseFrame = false;
-    if (_houseTitles.empty())
+    if (_houseTitles.empty()) {
+        finishHouseWaresFrame();
         return;
+    }
     // houseDialogManager draws the building name first when the house table has one, then the
     // proprietor, then the options. Matching the name rather than the position keeps a nameless
     // house (and a map transition, which draws neither) from reading its proprietor as an option.
@@ -714,8 +723,10 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
         appendSentence(heading, titles.front());
         firstOption = 1;
     }
-    if (heading.empty())
+    if (heading.empty()) {
+        finishHouseWaresFrame();
         return;
+    }
     std::string options;
     for (size_t i = firstOption; i < titles.size(); ++i) {
         if (!options.empty())
@@ -736,12 +747,15 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     appendSentence(spoken, body);
     if (!options.empty())
         appendSentence(spoken, spoken.empty() ? options : "Options: " + options);
-    if (spoken.empty())
+    if (spoken.empty()) {
+        finishHouseWaresFrame();
         return;
+    }
 
     std::string key = heading + "\x1f" + body + "\x1f" + options;
     if (key == _houseKey) {
         emitHouseFocus(focusedOption);
+        finishHouseWaresFrame();
         return;
     }
     std::string instance = "mm7/house/" + std::to_string(_houseInstance);
@@ -766,6 +780,7 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
         _houseOperations = std::move(operations);
     }
     emitHouseFocus(focusedOption);
+    finishHouseWaresFrame();
 }
 
 void BlazonBridge::emitHouseFocus(std::string_view focusedOption) {
@@ -797,6 +812,8 @@ void BlazonBridge::emitHouseFocus(std::string_view focusedOption) {
 void BlazonBridge::endHouse() {
     if (!_enabled || _houseInstance == 0)
         return;
+    endHouseWareFocus();
+    endHouseWares();
     endLifetime("house_instance", "mm7/house/" + std::to_string(_houseInstance));
     _houseInstance = 0;
     _houseId = -1;
@@ -804,6 +821,132 @@ void BlazonBridge::endHouse() {
     _houseKey.clear();
     _houseOperations.clear();
     _houseFocusOperations.clear();
+}
+
+void BlazonBridge::observeHouseWares(const std::vector<BlazonWare> &wares, const char *hook) {
+    if (!_enabled || !_inHouseFrame)
+        return;
+    _houseWaresSeenInFrame = true;
+    _houseFrameWares = wares;
+    _houseWaresHook = hook;
+}
+
+void BlazonBridge::observeHouseWare(const BlazonWare &ware, const char *hook) {
+    if (!_enabled || !_inHouseFrame)
+        return;
+    _houseWareSeenInFrame = true;
+    _houseFrameWare = ware;
+    _houseWareFocusHook = hook;
+}
+
+std::string BlazonBridge::houseWareLine(const BlazonWare &ware) {
+    std::string line = stripFontCodes(ware.name);
+    std::string spellName = stripFontCodes(ware.spellName);
+    std::string schoolName = stripFontCodes(ware.schoolName);
+    if (!spellName.empty()) {
+        line += ". " + spellName;
+        if (!schoolName.empty())
+            line += ", " + schoolName + " Magic";
+    }
+    switch (ware.action) {
+      case BlazonWareAction::BLAZON_WARE_ACTION_BUY:
+        line += fmt::format(", {} gold", ware.price);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_SELL:
+        line += fmt::format(", {} gold offered", ware.price);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_IDENTIFY:
+        line += fmt::format(", {} gold to identify", ware.price);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_REPAIR:
+        line += fmt::format(", {} gold to repair", ware.price);
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_ALREADY_IDENTIFIED:
+        line += ", already identified";
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_NO_REPAIR_NEEDED:
+        line += ", no repair needed";
+        break;
+      case BlazonWareAction::BLAZON_WARE_ACTION_UNAVAILABLE:
+        line += ", unavailable here";
+        break;
+    }
+    return line + ".";
+}
+
+void BlazonBridge::finishHouseWaresFrame() {
+    if (!_houseWaresSeenInFrame || _houseFrameWares.empty()) {
+        endHouseWareFocus();
+        endHouseWares();
+        return;
+    }
+
+    std::string shelf;
+    for (size_t i = 0; i < _houseFrameWares.size(); ++i) {
+        if (!shelf.empty())
+            shelf += " ";
+        shelf += fmt::format("{}. {}", i + 1, houseWareLine(_houseFrameWares[i]));
+    }
+    if (shelf != _houseWaresKey) {
+        if (_houseWaresInstance == 0)
+            _houseWaresInstance = ++_instanceSequence;
+        std::string instance = "mm7/house-wares/" + std::to_string(_houseWaresInstance);
+        std::string collection = instance + "/state";
+        std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
+        Json fields = Json::array();
+        fields.push_back(makeTextField(instance, collection, "house_wares_instance", subjectId, "wares",
+                                       "house item tables in visual order", _houseWaresHook.c_str(), shelf));
+        std::string operations = makeCollection(_sourceRun, instance, collection, "house_wares_instance",
+                                                kHouseWaresCollectionKind, subjectId, "house",
+                                                "GUIWindow_House::houseId", _houseName.empty() ? "house" : _houseName,
+                                                _houseWaresHook.c_str(), std::move(fields));
+        if (sendTransaction(operations)) {
+            _houseWaresKey = shelf;
+            _houseWaresOperations = std::move(operations);
+        }
+    }
+
+    if (!_houseWareSeenInFrame) {
+        endHouseWareFocus();
+        return;
+    }
+    std::string focus = houseWareLine(_houseFrameWare);
+    if (focus == _houseWareFocusKey)
+        return;
+    endHouseWareFocus();
+    _houseWareFocusInstance = ++_instanceSequence;
+    std::string instance = "mm7/house-ware-focus/" + std::to_string(_houseWareFocusInstance);
+    std::string collection = instance + "/state";
+    std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "house_ware_focus_instance", subjectId, "ware",
+                                   "house item rectangle under the pointer", _houseWareFocusHook.c_str(), focus));
+    std::string operations = makeCollection(_sourceRun, instance, collection, "house_ware_focus_instance",
+                                            kHouseWareFocusCollectionKind, subjectId, "house",
+                                            "GUIWindow_House::houseId", _houseName.empty() ? "house" : _houseName,
+                                            _houseWareFocusHook.c_str(), std::move(fields));
+    if (sendTransaction(operations)) {
+        _houseWareFocusKey = focus;
+        _houseWareFocusOperations = std::move(operations);
+    } else {
+        _houseWareFocusInstance = 0;
+    }
+}
+
+void BlazonBridge::endHouseWares() {
+    if (_houseWaresInstance != 0)
+        endLifetime("house_wares_instance", "mm7/house-wares/" + std::to_string(_houseWaresInstance));
+    _houseWaresInstance = 0;
+    _houseWaresKey.clear();
+    _houseWaresOperations.clear();
+}
+
+void BlazonBridge::endHouseWareFocus() {
+    if (_houseWareFocusInstance != 0)
+        endLifetime("house_ware_focus_instance", "mm7/house-ware-focus/" + std::to_string(_houseWareFocusInstance));
+    _houseWareFocusInstance = 0;
+    _houseWareFocusKey.clear();
+    _houseWareFocusOperations.clear();
 }
 
 void BlazonBridge::beginDialogue(int npcId) {
@@ -1757,6 +1900,8 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _dialogueFocusOperations);
     appendOperations(operations, _houseOperations);
     appendOperations(operations, _houseFocusOperations);
+    appendOperations(operations, _houseWaresOperations);
+    appendOperations(operations, _houseWareFocusOperations);
     appendOperations(operations, _partyCreationOperations);
     appendOperations(operations, _partyCreationEntryOperations);
     appendOperations(operations, _partyCreationFocusOperations);
