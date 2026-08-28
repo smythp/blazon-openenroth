@@ -321,9 +321,10 @@ void BlazonBridge::endMessage() {
     _messageEmitted = false;
 }
 
-void BlazonBridge::beginHouseFrame(int houseId) {
+void BlazonBridge::beginHouseFrame(int houseId, std::string_view houseName) {
     if (!_enabled)
         return;
+    _houseName = stripFontCodes(houseName);
     if (_houseInstance == 0 || houseId != _houseId) {
         if (_houseInstance != 0)
             endHouse();
@@ -343,13 +344,27 @@ void BlazonBridge::endHouseFrame() {
     _inHouseFrame = false;
     if (_houseTitles.empty())
         return;
-    // drawNpcHouseNameAndTitle runs first, so the first title is the heading and the rest are options.
-    std::string heading = _houseTitles.front();
+    // houseDialogManager draws the building name first when the house table has one, then the
+    // proprietor, then the options. Matching the name rather than the position keeps a nameless
+    // house (and a map transition, which draws neither) from reading its proprietor as an option.
+    std::vector<std::string> titles;
+    for (const std::string &title : _houseTitles) {
+        if (title != _houseName)
+            titles.push_back(title);
+    }
+    std::string heading = _houseName;
+    size_t firstOption = 0;
+    if (!titles.empty()) {
+        appendSentence(heading, titles.front());
+        firstOption = 1;
+    }
+    if (heading.empty())
+        return;
     std::string options;
-    for (size_t i = 1; i < _houseTitles.size(); ++i) {
+    for (size_t i = firstOption; i < titles.size(); ++i) {
         if (!options.empty())
             options += ", ";
-        options += _houseTitles[i];
+        options += titles[i];
     }
     std::string body;
     for (const std::string &part : _houseBody)

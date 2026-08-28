@@ -1065,7 +1065,7 @@ void GUIWindow_House::Update() {
     if (!window_SpeakInHouse) {
         return;
     }
-    BlazonBridge::instance().beginHouseFrame(static_cast<int>(houseId()));
+    BlazonBridge::instance().beginHouseFrame(static_cast<int>(houseId()), houseTable[houseId()].name);
     houseDialogManager();
     BlazonBridge::instance().endHouseFrame();
     if (!isShop(houseId())) {

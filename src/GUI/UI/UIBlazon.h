@@ -92,8 +92,9 @@ class BlazonBridge {
      * and the option labels in draw order.
      *
      * @param houseId                   House identity, the subject.
+     * @param houseName                 Building name from the game's house table, may be empty.
      */
-    void beginHouseFrame(int houseId);
+    void beginHouseFrame(int houseId, std::string_view houseName);
     void endHouseFrame();
     void endHouse();
 
@@ -158,6 +159,7 @@ class BlazonBridge {
 
     uint64_t _houseInstance = 0;
     int _houseId = -1;
+    std::string _houseName;
     bool _inHouseFrame = false;
     bool _houseEmitted = false;
     std::string _houseKey;
