@@ -1,4 +1,5 @@
 #include "UIBlazon.h"
+#include "UIBlazonCharacterRecord.h"
 #include "UIBlazonPartyCreation.h"
 #include "UIBlazonPortraits.h"
 
@@ -16,18 +17,26 @@
 #include <exception>
 #include <random>
 #include <string>
+#include <tuple>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "Engine/AssetsManager.h"
 #include "Engine/EngineIocContainer.h"
 #include "Engine/Localization.h"
 #include "Engine/Objects/Character.h"
+#include "Engine/Objects/CharacterEnumFunctions.h"
+#include "Engine/Objects/ItemEnumFunctions.h"
 #include "Engine/Party.h"
+#include "Engine/Spells/Spells.h"
+#include "Engine/mm7_data.h"
 
 #include "GUI/GUIButton.h"
 #include "GUI/GUIWindow.h"
+#include "GUI/UI/UICharacter.h"
 
 #include "Io/Mouse.h"
 
@@ -53,11 +62,15 @@ constexpr const char *kPartyCreationStateCollectionKind = "mm7.party_creation.ch
 constexpr const char *kPartyCreationEntryCollectionKind = "mm7.party_creation.entry.state";
 constexpr const char *kPartyCreationFocusCollectionKind = "mm7.party_creation.focus.state";
 constexpr const char *kPartyCreationChangeCollectionKind = "mm7.party_creation.change.state";
+constexpr const char *kCharacterRecordStateCollectionKind = "mm7.character_record.tab.state";
+constexpr const char *kCharacterRecordEntryCollectionKind = "mm7.character_record.entry.state";
+constexpr const char *kCharacterRecordFocusCollectionKind = "mm7.character_record.focus.state";
 constexpr const char *kPortraitVitalsCollectionKind = "mm7.portrait_vitals.state";
 constexpr const char *kPortraitSelectionVitalsCollectionKind = "mm7.portrait_selection_vitals.state";
 constexpr const char *kSubjectId = "mm7/pointer";
 constexpr const char *kGameSubjectId = "mm7/game";
 constexpr const char *kPartyCreationSubjectId = "mm7/party-creation";
+constexpr const char *kCharacterRecordSubjectId = "mm7/character-record";
 
 Json makeLifetime(const char *kind, const std::string &id) {
     return Json{{"kind", kind}, {"id", id}};
@@ -243,6 +256,223 @@ std::string gameTextToUtf8(std::string_view text) {
     return txt::encodedToUtf8(text, ENCODING_WINDOWS_1252);
 }
 
+struct CharacterRecordRow {
+    std::string key;
+    std::string text;
+    Recti rect;
+};
+
+std::string characterRecordLocalized(LstrId id) {
+    return gameTextToUtf8(localization->str(id));
+}
+
+std::string characterRecordCurrentAndBase(LstrId label, int current, int base) {
+    return gameTextToUtf8(BlazonCharacterRecord::currentAndBase(
+        characterRecordLocalized(label), current, base));
+}
+
+std::string characterRecordCurrentAndMaximum(LstrId label, int current, int maximum) {
+    return gameTextToUtf8(BlazonCharacterRecord::currentAndMaximum(
+        characterRecordLocalized(label), current, maximum));
+}
+
+std::string characterRecordSkill(Character &character, Skill skill) {
+    CombinedSkillValue value = character.getSkillValue(skill);
+    return gameTextToUtf8(BlazonCharacterRecord::skill(
+        gameTextToUtf8(localization->skillName(skill)), value.level(),
+        gameTextToUtf8(localization->masteryName(value.mastery()))));
+}
+
+std::string characterRecordSkillFocus(Character &character, Skill skill) {
+    CombinedSkillValue value = character.getSkillValue(skill);
+    std::string result = characterRecordSkill(character, skill);
+    int cost = value.level() + 1;
+    if (skills_max_level[skill] == 1) {
+        return result;
+    } else if (skills_max_level[skill] <= value.level()) {
+        result += ", maximum level";
+    } else if (character.uSkillPoints < cost) {
+        result += fmt::format(", needs {} more skill points", cost - character.uSkillPoints);
+    } else {
+        result += fmt::format(", costs {} skill points", cost);
+    }
+    return gameTextToUtf8(result);
+}
+
+std::vector<CharacterRecordRow> characterRecordStatsRows(Character &character) {
+    std::vector<CharacterRecordRow> rows;
+    int height = assets->pFontArrus->GetHeight();
+    auto add = [&rows](std::string key, std::string text, Recti rect) {
+        rows.push_back({std::move(key), gameTextToUtf8(text), rect});
+    };
+
+    add("skill-points", fmt::format("{} {}", characterRecordLocalized(LSTR_SKILL_POINTS), character.uSkillPoints),
+        Recti(180, 18, 270, height));
+
+    int y = 53;
+    add("might", characterRecordCurrentAndBase(LSTR_MIGHT, character.GetActualMight(), character.GetBaseMight()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("intellect", characterRecordCurrentAndBase(LSTR_INTELLECT, character.GetActualIntelligence(), character.GetBaseIntelligence()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("personality", characterRecordCurrentAndBase(LSTR_PERSONALITY, character.GetActualPersonality(), character.GetBasePersonality()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("endurance", characterRecordCurrentAndBase(LSTR_ENDURANCE, character.GetActualEndurance(), character.GetBaseEndurance()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("accuracy", characterRecordCurrentAndBase(LSTR_ACCURACY, character.GetActualAccuracy(), character.GetBaseAccuracy()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("speed", characterRecordCurrentAndBase(LSTR_SPEED, character.GetActualSpeed(), character.GetBaseSpeed()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("luck", characterRecordCurrentAndBase(LSTR_LUCK, character.GetActualLuck(), character.GetBaseLuck()), Recti(26, y, 226, height));
+
+    y += 2 * height + 5;
+    add("health", characterRecordCurrentAndMaximum(LSTR_HIT_POINTS, character.GetHealth(), character.GetMaxHealth()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("mana", characterRecordCurrentAndMaximum(LSTR_SPELL_POINTS, character.GetMana(), character.GetMaxMana()), Recti(26, y, 226, height));
+    y += height - 2;
+    add("armor-class", characterRecordCurrentAndBase(LSTR_ARMOR_CLASS, character.GetActualAC(), character.GetBaseAC()), Recti(26, y, 226, height));
+    y += 2 * height - 2;
+    add("condition", fmt::format("{} {}", characterRecordLocalized(LSTR_CONDITION),
+                                  gameTextToUtf8(localization->characterConditionName(character.GetMajorConditionIdx()))),
+        Recti(26, y, 226, height));
+    y += height - 1;
+    std::string spellName = characterRecordLocalized(LSTR_NONE);
+    if (character.uQuickSpell != SPELL_NONE)
+        spellName = gameTextToUtf8(pSpellStats->pInfos[character.uQuickSpell].pShortName);
+    add("quick-spell", fmt::format("{} {}", characterRecordLocalized(LSTR_QUICK_SPELL), spellName), Recti(26, y, 226, height));
+
+    y = 50;
+    add("age", characterRecordCurrentAndBase(LSTR_AGE, character.GetActualAge(), character.GetBaseAge()), Recti(266, y, 184, height));
+    y += height - 2;
+    add("level", characterRecordCurrentAndBase(LSTR_LEVEL, character.GetActualLevel(), character.GetBaseLevel()), Recti(266, y, 184, height));
+    y += height - 2;
+    uint64_t nextLevelExperience = 1000ull * character.uLevel * (character.uLevel + 1) / 2;
+    add("experience", fmt::format("{} {} of {}", characterRecordLocalized(LSTR_EXPERIENCE),
+                                   character.experience, nextLevelExperience), Recti(266, y, 184, height));
+
+    y += 2 * height;
+    add("attack", fmt::format("{} {:+}", characterRecordLocalized(LSTR_ATTACK), character.GetActualAttack(false)), Recti(266, y, 184, height));
+    y += height - 2;
+    add("melee-damage", fmt::format("{} {}", characterRecordLocalized(LSTR_DAMAGE), character.GetMeleeDamageString()), Recti(266, y, 184, height));
+    y += height - 2;
+    add("shoot", fmt::format("{} {:+}", characterRecordLocalized(LSTR_SHOOT), character.GetRangedAttack()), Recti(266, y, 184, height));
+    y += height - 2;
+    add("ranged-damage", fmt::format("{} {}", characterRecordLocalized(LSTR_DAMAGE), character.GetRangedDamageString()), Recti(266, y, 184, height));
+
+    y += 2 * height - 4;
+    auto addResistance = [&](std::string key, LstrId label, Attribute attribute, bool immune = false) {
+        std::string text = immune
+            ? fmt::format("{} {}", characterRecordLocalized(label), characterRecordLocalized(LSTR_IMMUNE))
+            : characterRecordCurrentAndBase(label, character.GetActualResistance(attribute), character.GetBaseResistance(attribute));
+        add(std::move(key), std::move(text), Recti(266, y, 184, height));
+        y += height - 2;
+    };
+    addResistance("fire-resistance", LSTR_FIRE, ATTRIBUTE_RESIST_FIRE);
+    addResistance("air-resistance", LSTR_AIR, ATTRIBUTE_RESIST_AIR);
+    addResistance("water-resistance", LSTR_WATER, ATTRIBUTE_RESIST_WATER);
+    addResistance("earth-resistance", LSTR_EARTH, ATTRIBUTE_RESIST_EARTH);
+    addResistance("mind-resistance", LSTR_MIND, ATTRIBUTE_RESIST_MIND,
+                  character.classType == CLASS_LICH && character.GetBaseResistance(ATTRIBUTE_RESIST_MIND) == 200);
+    addResistance("body-resistance", LSTR_BODY, ATTRIBUTE_RESIST_BODY,
+                  character.classType == CLASS_LICH && character.GetBaseResistance(ATTRIBUTE_RESIST_BODY) == 200);
+    return rows;
+}
+
+std::string characterRecordTabName(int tab) {
+    switch (static_cast<WindowType>(tab)) {
+    case WINDOW_CharacterWindow_Stats:
+        return characterRecordLocalized(LSTR_STATS);
+    case WINDOW_CharacterWindow_Skills:
+        return characterRecordLocalized(LSTR_SKILLS);
+    case WINDOW_CharacterWindow_Inventory:
+        return characterRecordLocalized(LSTR_INVENTORY);
+    case WINDOW_CharacterWindow_Awards:
+        return characterRecordLocalized(LSTR_AWARDS);
+    default:
+        assert(false);
+        return {};
+    }
+}
+
+std::string characterRecordSkillGroup(Character &character, std::string_view name,
+                                      std::initializer_list<Skill> skills) {
+    std::string result = gameTextToUtf8(name);
+    result += ": ";
+    bool found = false;
+    for (Skill skill : skills) {
+        if (!character.getSkillValue(skill).level())
+            continue;
+        if (found)
+            result += ", ";
+        result += characterRecordSkill(character, skill);
+        found = true;
+    }
+    if (!found)
+        result += characterRecordLocalized(LSTR_NONE);
+    return gameTextToUtf8(result);
+}
+
+std::string characterRecordInventoryContents(Character &character) {
+    struct GridItem {
+        Pointi position;
+        std::string name;
+    };
+    std::vector<GridItem> gridItems;
+    for (InventoryEntry entry : character.inventory.entries()) {
+        if (entry.zone() == INVENTORY_ZONE_GRID)
+            gridItems.push_back({entry.geometry().topLeft(), gameTextToUtf8(entry->GetDisplayName())});
+    }
+    std::ranges::sort(gridItems, [](const GridItem &left, const GridItem &right) {
+        return std::tie(left.position.y, left.position.x) < std::tie(right.position.y, right.position.x);
+    });
+
+    std::string result = "Bag: ";
+    for (size_t index = 0; index < gridItems.size(); ++index) {
+        if (index)
+            result += ", ";
+        result += gridItems[index].name;
+    }
+    if (gridItems.empty())
+        result += characterRecordLocalized(LSTR_NONE);
+
+    result += ". Equipped: ";
+    std::unordered_set<int> seen;
+    bool equipped = false;
+    for (ItemSlot slot : allItemSlots()) {
+        InventoryEntry entry = character.inventory.entry(slot);
+        if (!entry || !seen.insert(entry.index()).second)
+            continue;
+        if (equipped)
+            result += ", ";
+        result += gameTextToUtf8(entry->GetDisplayName());
+        equipped = true;
+    }
+    if (!equipped)
+        result += characterRecordLocalized(LSTR_NONE);
+    return gameTextToUtf8(result);
+}
+
+std::pair<std::string, std::string> characterRecordButtonFocus(const GUIButton &button,
+                                                                Character &character) {
+    switch (button.msg) {
+    case UIMSG_ClickStatsBtn:
+        return {"tab:stats", gameTextToUtf8(characterRecordTabName(WINDOW_CharacterWindow_Stats) + " tab")};
+    case UIMSG_ClickSkillsBtn:
+        return {"tab:skills", gameTextToUtf8(characterRecordTabName(WINDOW_CharacterWindow_Skills) + " tab")};
+    case UIMSG_ClickInventoryBtn:
+        return {"tab:inventory", gameTextToUtf8(characterRecordTabName(WINDOW_CharacterWindow_Inventory) + " tab")};
+    case UIMSG_ClickAwardsBtn:
+        return {"tab:awards", gameTextToUtf8(characterRecordTabName(WINDOW_CharacterWindow_Awards) + " tab")};
+    case UIMSG_ClickExitCharacterWindowBtn:
+        return {"exit", gameTextToUtf8(localization->str(LSTR_EXIT_DIALOGUE))};
+    case UIMSG_SkillUp: {
+        Skill skill = static_cast<Skill>(button.msg_param);
+        return {fmt::format("skill:{}", button.msg_param), characterRecordSkillFocus(character, skill)};
+    }
+    default:
+        return {};
+    }
+}
+
 }  // namespace
 
 BlazonBridge &BlazonBridge::instance() {
@@ -343,7 +573,9 @@ std::vector<std::string> BlazonBridge::dialogueOptionLabels(std::vector<std::str
 void BlazonBridge::observeStatus(std::string_view text) {
     if (!_enabled)
         return;
-    std::string utf8 = _portraitHoverSlot >= 0 ? std::string() : gameTextToUtf8(text);
+    bool semanticPointer = _portraitHoverSlot >= 0 ||
+                           (_characterRecordInstance != 0 && !_characterRecordPointerKey.empty());
+    std::string utf8 = semanticPointer ? std::string() : gameTextToUtf8(text);
     if (utf8 == _currentText && (_currentInstance != 0 || utf8.empty()))
         return;
     if (_currentInstance != 0)
@@ -1036,6 +1268,222 @@ void BlazonBridge::endPartyCreation() {
     _partyCreationChangeOperations.clear();
 }
 
+BlazonBridge::CharacterRecordState BlazonBridge::characterRecordState(
+    const GUIWindow_CharacterRecord &window) const {
+    CharacterRecordState result;
+    result.characterSlot = pParty->activeCharacterIndex() - 1;
+    Character &character = pParty->pCharacters[result.characterSlot];
+    result.characterName = gameTextToUtf8(character.name);
+    result.tab = std::to_underlying(current_character_screen_window);
+    result.tabName = gameTextToUtf8(characterRecordTabName(result.tab));
+
+    switch (current_character_screen_window) {
+    case WINDOW_CharacterWindow_Stats:
+        for (const CharacterRecordRow &row : characterRecordStatsRows(character))
+            appendSentence(result.contents, row.text);
+        break;
+    case WINDOW_CharacterWindow_Skills:
+        appendSentence(result.contents, fmt::format("{} {}", characterRecordLocalized(LSTR_SKILL_POINTS), character.uSkillPoints));
+        appendSentence(result.contents, characterRecordSkillGroup(character, characterRecordLocalized(LSTR_WEAPONS), allWeaponSkills()));
+        appendSentence(result.contents, characterRecordSkillGroup(character, characterRecordLocalized(LSTR_MAGIC), allMagicSkills()));
+        appendSentence(result.contents, characterRecordSkillGroup(character, characterRecordLocalized(LSTR_ARMOR), allArmorSkills()));
+        appendSentence(result.contents, characterRecordSkillGroup(character, characterRecordLocalized(LSTR_MISC), allMiscSkills()));
+        break;
+    case WINDOW_CharacterWindow_Inventory:
+        result.contents = characterRecordInventoryContents(character);
+        break;
+    case WINDOW_CharacterWindow_Awards:
+        for (int index = 0; index < window._achievedAwardsList.size(); ++index)
+            appendSentence(result.contents, stripFontCodes(window.getAchievedAwardsString(index)));
+        if (result.contents.empty())
+            result.contents = characterRecordLocalized(LSTR_NONE);
+        break;
+    default:
+        assert(false);
+        break;
+    }
+    result.contents = gameTextToUtf8(result.contents);
+    return result;
+}
+
+BlazonBridge::CharacterRecordFocus BlazonBridge::characterRecordPointerFocus(
+    const GUIWindow_CharacterRecord &window, const CharacterRecordState &state) const {
+    Pointi pointer = EngineIocContainer::ResolveMouse()->position();
+    Character &character = pParty->pCharacters[state.characterSlot];
+
+    for (GUIButton *button : window.vButtons) {
+        if (!button->Contains(pointer))
+            continue;
+        auto [key, text] = characterRecordButtonFocus(*button, character);
+        if (!key.empty())
+            return {std::move(key), std::move(text)};
+    }
+
+    if (current_character_screen_window == WINDOW_CharacterWindow_Stats) {
+        for (const CharacterRecordRow &row : characterRecordStatsRows(character)) {
+            if (row.rect.contains(pointer))
+                return {"stat:" + row.key, row.text};
+        }
+    } else if (current_character_screen_window == WINDOW_CharacterWindow_Awards) {
+        for (int index = 0; index < window._blazonAwardRows.size(); ++index) {
+            const GUIWindow_CharacterRecord::BlazonAwardRow &row = window._blazonAwardRows[index];
+            if (row.rect.contains(pointer))
+                return {fmt::format("award:{}", window._startAwardElem + index), stripFontCodes(row.text)};
+        }
+    }
+
+    int itemIndex = CharacterUI_BlazonEquipmentAt(pointer, character);
+    InventoryEntry entry = character.inventory.entry(itemIndex);
+    if (entry) {
+        return {fmt::format("equipped:{}", itemIndex),
+                gameTextToUtf8(entry->GetDisplayName() + ", equipped")};
+    }
+    return {};
+}
+
+BlazonBridge::CharacterRecordFocus BlazonBridge::characterRecordKeyboardFocus(
+    const GUIWindow_CharacterRecord &window, const CharacterRecordState &state) const {
+    if (!window.receives_keyboard_input || window.pCurrentPosActiveItem < 0 ||
+        window.pCurrentPosActiveItem >= window.vButtons.size()) {
+        return {};
+    }
+    Character &character = pParty->pCharacters[state.characterSlot];
+    auto [key, text] = characterRecordButtonFocus(
+        *window.vButtons[window.pCurrentPosActiveItem], character);
+    return {std::move(key), std::move(text)};
+}
+
+bool BlazonBridge::emitCharacterRecordState(const CharacterRecordState &state) {
+    std::string key = fmt::format("{}\x1f{}\x1f{}\x1f{}", state.characterSlot,
+                                  state.characterName, state.tabName, state.contents);
+    if (key == _characterRecordStateKey)
+        return true;
+
+    std::string instance = "mm7/character-record/" + std::to_string(_characterRecordInstance);
+    std::string collection = instance + "/tab";
+    std::string subjectId = "mm7/party/character/slot/" + std::to_string(state.characterSlot + 1);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "character_record_instance", subjectId,
+                                   "tab", "GUIWindow_CharacterRecord current tab",
+                                   "GUIWindow_CharacterRecord::Update", gameTextToUtf8(state.tabName)));
+    fields.push_back(makeTextField(instance, collection, "character_record_instance", subjectId,
+                                   "contents", "Character state and game tables",
+                                   "GUIWindow_CharacterRecord::Update", gameTextToUtf8(state.contents)));
+    std::string operations = makeCollection(
+        _sourceRun, instance, collection, "character_record_instance",
+        kCharacterRecordStateCollectionKind, subjectId, "character", "Party::pCharacters",
+        gameTextToUtf8(state.characterName), "GUIWindow_CharacterRecord::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _characterRecordStateKey = std::move(key);
+    _characterRecordOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitCharacterRecordEntry(const CharacterRecordState &state) {
+    if (_characterRecordEntryEmitted)
+        return true;
+    std::string instance = "mm7/character-record/" + std::to_string(_characterRecordInstance);
+    std::string collection = instance + "/entry";
+    std::string subjectId = "mm7/party/character/slot/" + std::to_string(state.characterSlot + 1);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "character_record_instance", subjectId,
+                                   "entry_tab", "GUIWindow_CharacterRecord current tab",
+                                   "GUIWindow_CharacterRecord::Update", gameTextToUtf8(state.tabName)));
+    std::string operations = makeCollection(
+        _sourceRun, instance, collection, "character_record_instance",
+        kCharacterRecordEntryCollectionKind, subjectId, "character", "Party::pCharacters",
+        gameTextToUtf8(state.characterName), "GUIWindow_CharacterRecord::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _characterRecordEntryEmitted = true;
+    _characterRecordEntryOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitCharacterRecordFocus(const CharacterRecordFocus &focus) {
+    if (_characterRecordFocusInstance != 0) {
+        endLifetime("character_record_focus_instance",
+                    "mm7/character-record/focus/" + std::to_string(_characterRecordFocusInstance));
+        _characterRecordFocusInstance = 0;
+        _characterRecordFocusOperations.clear();
+    }
+    if (focus.text.empty())
+        return true;
+
+    uint64_t number = ++_instanceSequence;
+    std::string instance = "mm7/character-record/focus/" + std::to_string(number);
+    std::string collection = instance + "/state";
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "character_record_focus_instance",
+                                   kCharacterRecordSubjectId, "focus",
+                                   "GUIWindow controls, character state, equipment hit map, and award table",
+                                   "GUIWindow_CharacterRecord::Update", gameTextToUtf8(focus.text)));
+    std::string operations = makeCollection(
+        _sourceRun, instance, collection, "character_record_focus_instance",
+        kCharacterRecordFocusCollectionKind, kCharacterRecordSubjectId, "screen",
+        "GUIWindow_CharacterRecord", gameTextToUtf8("Character Record"),
+        "GUIWindow_CharacterRecord::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _characterRecordFocusInstance = number;
+    _characterRecordFocusOperations = std::move(operations);
+    return true;
+}
+
+void BlazonBridge::observeCharacterRecord(GUIWindow_CharacterRecord &window) {
+    if (!_enabled)
+        return;
+    if (_characterRecordInstance == 0) {
+        _characterRecordInstance = ++_instanceSequence;
+        _characterRecordEntryEmitted = false;
+        _characterRecordStateKey.clear();
+        _characterRecordPointerKey.clear();
+        _characterRecordKeyboardKey.clear();
+        _characterRecordOperations.clear();
+        _characterRecordEntryOperations.clear();
+        _characterRecordFocusOperations.clear();
+    }
+
+    CharacterRecordState state = characterRecordState(window);
+    emitCharacterRecordState(state);
+    emitCharacterRecordEntry(state);
+    CharacterRecordFocus pointerFocus = characterRecordPointerFocus(window, state);
+    CharacterRecordFocus keyboardFocus = characterRecordKeyboardFocus(window, state);
+    if (pointerFocus.key != _characterRecordPointerKey) {
+        if (emitCharacterRecordFocus(pointerFocus)) {
+            _characterRecordPointerKey = pointerFocus.key;
+            _characterRecordKeyboardKey = keyboardFocus.key;
+        }
+    } else if (keyboardFocus.key != _characterRecordKeyboardKey) {
+        if (emitCharacterRecordFocus(keyboardFocus)) {
+            _characterRecordPointerKey = pointerFocus.key;
+            _characterRecordKeyboardKey = keyboardFocus.key;
+        }
+    }
+    _characterRecordState = std::move(state);
+}
+
+void BlazonBridge::endCharacterRecord() {
+    if (!_enabled || _characterRecordInstance == 0)
+        return;
+    if (_characterRecordFocusInstance != 0) {
+        endLifetime("character_record_focus_instance",
+                    "mm7/character-record/focus/" + std::to_string(_characterRecordFocusInstance));
+        _characterRecordFocusInstance = 0;
+    }
+    endLifetime("character_record_instance",
+                "mm7/character-record/" + std::to_string(_characterRecordInstance));
+    _characterRecordInstance = 0;
+    _characterRecordEntryEmitted = false;
+    _characterRecordStateKey.clear();
+    _characterRecordPointerKey.clear();
+    _characterRecordKeyboardKey.clear();
+    _characterRecordOperations.clear();
+    _characterRecordEntryOperations.clear();
+    _characterRecordFocusOperations.clear();
+}
+
 bool BlazonBridge::emitPortraitVitals(int characterSlot, const std::string &instance,
                                       const char *lifetimeKind, const char *collectionKind,
                                       const char *hook, std::string *operations) {
@@ -1313,6 +1761,9 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _partyCreationEntryOperations);
     appendOperations(operations, _partyCreationFocusOperations);
     appendOperations(operations, _partyCreationChangeOperations);
+    appendOperations(operations, _characterRecordOperations);
+    appendOperations(operations, _characterRecordEntryOperations);
+    appendOperations(operations, _characterRecordFocusOperations);
     appendOperations(operations, _portraitHoverOperations);
     appendOperations(operations, _portraitSelectionOperations);
     if (operations.empty())

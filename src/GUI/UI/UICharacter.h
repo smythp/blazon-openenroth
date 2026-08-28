@@ -5,13 +5,14 @@
 
 #include "Engine/HitMap.h"
 #include "Engine/Data/AwardEnums.h"
+#include "Engine/Objects/ItemEnums.h"
 
 #include "GUI/GUIWindow.h"
 
 class GUIWindow_CharacterRecord : public GUIWindow {
  public:
     GUIWindow_CharacterRecord(int uActiveCharacter, ScreenType screen);
-    virtual ~GUIWindow_CharacterRecord() {}
+    virtual ~GUIWindow_CharacterRecord();
 
     virtual void Update() override;
 
@@ -44,18 +45,31 @@ class GUIWindow_CharacterRecord : public GUIWindow {
      */
     void fillAwardsData();
 
-    std::string getAchievedAwardsString(int idx);
+    std::string getAchievedAwardsString(int idx) const;
 
  private:
+    struct BlazonAwardRow {
+        Recti rect;
+        std::string text;
+    };
+
+    friend class BlazonBridge;
+
     bool _awardsScrollBarCreated = false;
     int _awardsCharacterId = -1;
     int _startAwardElem = 0;
     int _scrollableAwardSteps = 0;
     bool _awardLimitReached = false;
     std::vector<AwardId> _achievedAwardsList;
+    std::vector<BlazonAwardRow> _blazonAwardRows;
 };
 
 bool ringscreenactive();
+
+class Character;
+
+ItemSlot CharacterUI_RingOverlaySlotAt(Pointi position);
+int CharacterUI_BlazonEquipmentAt(Pointi position, Character &character);
 
 class GraphicsImage;
 extern GraphicsImage *ui_character_skills_background;

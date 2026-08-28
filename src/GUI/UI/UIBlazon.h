@@ -9,6 +9,7 @@
 #include <vector>
 
 class GUIWindow;
+class GUIWindow_CharacterRecord;
 
 /**
  * Blazon bridge for OpenEnroth.
@@ -116,6 +117,16 @@ class BlazonBridge {
     void endPartyCreation();
 
     /**
+     * Character record content and focus, observed after the current tab and
+     * paper doll have been composed. Values come from character state and game
+     * tables. The entry collection is emitted once per window lifetime.
+     *
+     * @param window                    Character record window and its controls.
+     */
+    void observeCharacterRecord(GUIWindow_CharacterRecord &window);
+    void endCharacterRecord();
+
+    /**
      * Observes the party portrait under the pointer once per HUD frame. A
      * portrait entry begins one vitals instance. Leaving or entering another
      * portrait ends it. Character changes within an instance stay silent.
@@ -205,6 +216,21 @@ class BlazonBridge {
         std::string text;
     };
 
+    struct CharacterRecordState {
+        int characterSlot = -1;
+        int tab = 0;
+        std::string characterName;
+        std::string tabName;
+        std::string contents;
+
+        bool operator==(const CharacterRecordState &) const = default;
+    };
+
+    struct CharacterRecordFocus {
+        std::string key;
+        std::string text;
+    };
+
     PartyCreationState partyCreationState() const;
     PartyCreationFocus partyCreationPointerFocus(const GUIWindow &window, const PartyCreationState &state) const;
     PartyCreationFocus partyCreationKeyboardFocus(const GUIWindow &window, const PartyCreationState &state) const;
@@ -213,6 +239,14 @@ class BlazonBridge {
     bool emitPartyCreationEntry(const PartyCreationState &state);
     bool emitPartyCreationFocus(const PartyCreationFocus &focus);
     bool emitPartyCreationChange(const std::string &text);
+    CharacterRecordState characterRecordState(const GUIWindow_CharacterRecord &window) const;
+    CharacterRecordFocus characterRecordPointerFocus(const GUIWindow_CharacterRecord &window,
+                                                       const CharacterRecordState &state) const;
+    CharacterRecordFocus characterRecordKeyboardFocus(const GUIWindow_CharacterRecord &window,
+                                                        const CharacterRecordState &state) const;
+    bool emitCharacterRecordState(const CharacterRecordState &state);
+    bool emitCharacterRecordEntry(const CharacterRecordState &state);
+    bool emitCharacterRecordFocus(const CharacterRecordFocus &focus);
     bool emitPortraitVitals(int characterSlot, const std::string &instance,
                             const char *lifetimeKind, const char *collectionKind,
                             const char *hook, std::string *operations);
@@ -283,6 +317,17 @@ class BlazonBridge {
     std::string _partyCreationEntryOperations;
     std::string _partyCreationFocusOperations;
     std::string _partyCreationChangeOperations;
+
+    uint64_t _characterRecordInstance = 0;
+    uint64_t _characterRecordFocusInstance = 0;
+    bool _characterRecordEntryEmitted = false;
+    CharacterRecordState _characterRecordState;
+    std::string _characterRecordStateKey;
+    std::string _characterRecordPointerKey;
+    std::string _characterRecordKeyboardKey;
+    std::string _characterRecordOperations;
+    std::string _characterRecordEntryOperations;
+    std::string _characterRecordFocusOperations;
 
     uint64_t _portraitHoverInstance = 0;
     int _portraitHoverSlot = -1;
