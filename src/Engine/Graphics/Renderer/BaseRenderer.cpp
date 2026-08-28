@@ -585,11 +585,16 @@ void BaseRenderer::updateRenderDimensions() {
     else
         outputRender = outputPresent;
 
+    updateViewport();
+}
+
+void BaseRenderer::updateViewport() {
     // Set viewport from config values (inclusive TL/BR coordinates).
-    int tlX = config->graphics.ViewPortX1.value();  // 8 in vanilla
-    int tlY = config->graphics.ViewPortY1.value();  // 8 in vanilla
-    int brX = outputRender.w - config->graphics.ViewPortX2.value();  // 468 in vanilla
-    int brY = outputRender.h - config->graphics.ViewPortY2.value();  // 352 in vanilla
+    bool fullscreenView = config->graphics.FullscreenView.value();
+    int tlX = fullscreenView ? 0 : config->graphics.ViewPortX1.value();  // 8 in vanilla
+    int tlY = fullscreenView ? 0 : config->graphics.ViewPortY1.value();  // 8 in vanilla
+    int brX = fullscreenView ? outputRender.w - 1 : outputRender.w - config->graphics.ViewPortX2.value();  // 468 in vanilla
+    int brY = fullscreenView ? outputRender.h - 1 : outputRender.h - config->graphics.ViewPortY2.value();  // 352 in vanilla
     pViewport = Recti(tlX, tlY, brX - tlX + 1, brY - tlY + 1);
 }
 

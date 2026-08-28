@@ -458,6 +458,8 @@ class GameConfig : public Config {
         Int ViewPortX2 = {this, "viewport_x2", 172, "Viewport bottom-right offset."};
         Int ViewPortY2 = {this, "viewport_y2", 128, "Viewport bottom-right offset."};
 
+        Bool FullscreenView = {this, "fullscreen_view", false, "Expand the 3D view and hide the game interface."};
+
         Int RenderWidth = {this, "render_width", 640, &ValidateRenderWidth, "Internal rendered resolution width"};
         Int RenderHeight = {this, "render_height", 480, &ValidateRenderHeight, "Internal rendered resolution height"};
 
@@ -589,6 +591,8 @@ class GameConfig : public Config {
         Key DialogRight = {this, INPUT_ACTION_DIALOG_RIGHT, "dialog_right", PlatformKey::KEY_RIGHT, "Dialog right key."};
         Key DialogSelect = {this, INPUT_ACTION_DIALOG_PRESS, "dialog_select", PlatformKey::KEY_RETURN, "Dialog select key."};
         Key Escape = {this, INPUT_ACTION_ESCAPE, "escape", PlatformKey::KEY_ESCAPE, "Escape key."};
+        Key ToggleFullscreenView = {this, INPUT_ACTION_TOGGLE_FULLSCREEN_VIEW, "toggle_fullscreen_view", PlatformKey::KEY_F8,
+                                    "Toggle fullscreen 3D view key."};
         Key ToggleMouseLook = {this, INPUT_ACTION_TOGGLE_MOUSE_LOOK, "toggle_mouse_look", PlatformKey::KEY_F10, "Toggle mouse look key."};
         Key ToggleWindowMode = {this, INPUT_ACTION_TOGGLE_WINDOW_MODE, "toggle_window_mode", PlatformKey::KEY_F11, "Toggle window mode key."};
 

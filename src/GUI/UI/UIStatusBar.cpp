@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "Application/GameConfig.h"
+
 #include "Engine/AssetsManager.h"
 #include "Engine/EngineGlobals.h"
 #include "Engine/Localization.h"
@@ -25,6 +27,9 @@ const std::string &StatusBar::get() {
 void StatusBar::draw() {
     // Blazon observes the hover text once per frame here, in both game loops.
     BlazonBridge::instance().observeStatus(_statusString);
+
+    if (render->config->graphics.FullscreenView.value())
+        return;
 
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 
