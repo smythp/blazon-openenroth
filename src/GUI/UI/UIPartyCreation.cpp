@@ -20,6 +20,7 @@
 #include "GUI/GUIButton.h"
 #include "GUI/GUIFont.h"
 #include "GUI/GUIMessageQueue.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIPartyCreation.h"
 
 #include "Io/Mouse.h"
@@ -566,6 +567,8 @@ void GUIWindow_PartyCreation::Update() {
     // force draw so overlays dont get muddled
     render->DrawTwodVerts();
     render->EndTextNew();
+
+    BlazonBridge::instance().observePartyCreation(*this);
 }
 
 //----- (0049695A) --------------------------------------------------------
@@ -704,6 +707,7 @@ GUIWindow_PartyCreation::GUIWindow_PartyCreation() :
 }
 
 GUIWindow_PartyCreation::~GUIWindow_PartyCreation() {
+    BlazonBridge::instance().endPartyCreation();
     main_menu_background->release();
     main_menu_background = nullptr;
 }

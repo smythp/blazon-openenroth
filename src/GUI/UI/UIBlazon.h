@@ -1,11 +1,14 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <ctime>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+class GUIWindow;
 
 /**
  * Blazon bridge for OpenEnroth.
@@ -105,6 +108,15 @@ class BlazonBridge {
     void endDialogue();
 
     /**
+     * Party creation content and focus, observed once after the screen composes
+     * a frame. Values come from character state and localization tables.
+     *
+     * @param window                    Party creation window and its controls.
+     */
+    void observePartyCreation(GUIWindow &window);
+    void endPartyCreation();
+
+    /**
      * Explicit Blazon command from a key press.
      *
      * @param action                    "capture", "stop", "read_collection" or "mark".
@@ -139,6 +151,40 @@ class BlazonBridge {
     void emitRawDraw(std::string_view text, int x, int y, int w, int h);
     void beginEvent(const std::string &text, const char *hook);
     void endEvent();
+
+    struct PartyCharacterState {
+        std::string name;
+        std::string race;
+        std::string className;
+        int face = -1;
+        int voice = -1;
+        std::array<int, 7> stats{};
+        std::array<std::string, 4> skills{};
+
+        bool operator==(const PartyCharacterState &) const = default;
+    };
+
+    struct PartyCreationState {
+        std::array<PartyCharacterState, 4> characters{};
+        int activeSlot = 0;
+        int bonus = 0;
+
+        bool operator==(const PartyCreationState &) const = default;
+    };
+
+    struct PartyCreationFocus {
+        std::string key;
+        std::string text;
+    };
+
+    PartyCreationState partyCreationState() const;
+    PartyCreationFocus partyCreationPointerFocus(const GUIWindow &window, const PartyCreationState &state) const;
+    PartyCreationFocus partyCreationKeyboardFocus(const GUIWindow &window, const PartyCreationState &state) const;
+    std::string partyCreationChange(const PartyCreationState &before, const PartyCreationState &after) const;
+    bool emitPartyCreationState(const PartyCreationState &state);
+    bool emitPartyCreationEntry(const PartyCreationState &state);
+    bool emitPartyCreationFocus(const PartyCreationFocus &focus);
+    bool emitPartyCreationChange(const std::string &text);
 
     std::string _socketPath;
     std::string _sourceRun;
@@ -191,6 +237,19 @@ class BlazonBridge {
     std::string _dialogueFocusText;
     std::string _dialogueOperations;
     std::string _dialogueFocusOperations;
+
+    uint64_t _partyCreationInstance = 0;
+    uint64_t _partyCreationFocusInstance = 0;
+    bool _partyCreationStateSeen = false;
+    bool _partyCreationEntryEmitted = false;
+    PartyCreationState _partyCreationState;
+    std::string _partyCreationStateKey;
+    std::string _partyCreationPointerKey;
+    std::string _partyCreationKeyboardKey;
+    std::string _partyCreationOperations;
+    std::string _partyCreationEntryOperations;
+    std::string _partyCreationFocusOperations;
+    std::string _partyCreationChangeOperations;
 
     void sendHeartbeat();
 

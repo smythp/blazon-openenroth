@@ -5,6 +5,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
@@ -18,7 +19,15 @@
 
 #include <nlohmann/json.hpp>
 
+#include "Engine/EngineIocContainer.h"
+#include "Engine/Localization.h"
+#include "Engine/Objects/Character.h"
+#include "Engine/Party.h"
+
+#include "GUI/GUIButton.h"
 #include "GUI/GUIWindow.h"
+
+#include "Io/Mouse.h"
 
 #include "Library/Logger/Logger.h"
 #include "Utility/String/Format.h"
@@ -37,8 +46,13 @@ constexpr const char *kHouseFocusCollectionKind = "mm7.house_focus.state";
 constexpr const char *kMessageCollectionKind = "mm7.message.state";
 constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
 constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
+constexpr const char *kPartyCreationStateCollectionKind = "mm7.party_creation.character.state";
+constexpr const char *kPartyCreationEntryCollectionKind = "mm7.party_creation.entry.state";
+constexpr const char *kPartyCreationFocusCollectionKind = "mm7.party_creation.focus.state";
+constexpr const char *kPartyCreationChangeCollectionKind = "mm7.party_creation.change.state";
 constexpr const char *kSubjectId = "mm7/pointer";
 constexpr const char *kGameSubjectId = "mm7/game";
+constexpr const char *kPartyCreationSubjectId = "mm7/party-creation";
 
 Json makeLifetime(const char *kind, const std::string &id) {
     return Json{{"kind", kind}, {"id", id}};
@@ -82,6 +96,15 @@ Json makeTextField(const std::string &instance, const std::string &collection, c
                    const std::string &text) {
     return makeField(instance, collection, lifetimeKind, subjectId.c_str(), key, origin, hook,
                      Json{{"type", "text"}, {"text", text}, {"display", text}});
+}
+
+Json makeIntegerField(const std::string &instance, const std::string &collection, const char *lifetimeKind,
+                      const std::string &subjectId, const char *key, const char *origin, const char *hook,
+                      const std::string &label, int value) {
+    Json field = makeField(instance, collection, lifetimeKind, subjectId.c_str(), key, origin, hook,
+                           Json{{"type", "integer"}, {"integer", value}, {"display", std::to_string(value)}});
+    field["label"] = Json{{"text", label}, {"origin", "runtime_resource"}};
+    return field;
 }
 
 // A complete collection of text fields under one subject, as one replace with the subject upserted first.
@@ -573,6 +596,387 @@ void BlazonBridge::endDialogue() {
     _dialogueFocusOperations.clear();
 }
 
+BlazonBridge::PartyCreationState BlazonBridge::partyCreationState() const {
+    PartyCreationState result;
+    for (int slot = 0; slot < result.characters.size(); ++slot) {
+        Character &character = pParty->pCharacters[slot];
+        PartyCharacterState &out = result.characters[slot];
+        out.name = character.name;
+        out.race = character.GetRaceName();
+        out.className = localization->expand(localization->className(character.classType));
+        out.face = character.uCurrentFace;
+        out.voice = character.uVoiceID;
+        out.stats = {
+            character.GetActualMight(),
+            character.GetActualIntelligence(),
+            character.GetActualPersonality(),
+            character.GetActualEndurance(),
+            character.GetActualAccuracy(),
+            character.GetActualSpeed(),
+            character.GetActualLuck(),
+        };
+        for (int index = 0; index < out.skills.size(); ++index)
+            out.skills[index] = localization->skillName(character.GetSkillIdxByOrder(index));
+    }
+    result.activeSlot = std::clamp((pGUIWindow_CurrentMenu->pCurrentPosActiveItem -
+                                    pGUIWindow_CurrentMenu->pStartingPosActiveItem) / 7, 0, 3);
+    result.bonus = CharacterCreation_GetUnspentAttributePointCount();
+    return result;
+}
+
+BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationPointerFocus(
+    const GUIWindow &window, const PartyCreationState &state) const {
+    Pointi pointer = EngineIocContainer::ResolveMouse()->position();
+
+    for (GUIButton *button : window.vButtons) {
+        if (!button->Contains(pointer))
+            continue;
+        int slot = std::min(static_cast<int>(button->msg_param), 3);
+        switch (button->msg) {
+        case UIMSG_PlayerCreationChangeName:
+            return {fmt::format("name:{}", slot), "Name " + state.characters[slot].name};
+        case UIMSG_PlayerCreation_FacePrev:
+            return {fmt::format("portrait-prev:{}", slot), "previous portrait"};
+        case UIMSG_PlayerCreation_FaceNext:
+            return {fmt::format("portrait-next:{}", slot), "next portrait"};
+        case UIMSG_PlayerCreation_VoicePrev:
+            return {fmt::format("voice-prev:{}", slot), "previous voice"};
+        case UIMSG_PlayerCreation_VoiceNext:
+            return {fmt::format("voice-next:{}", slot), "next voice"};
+        case UIMSG_48:
+        case UIMSG_49:
+        case UIMSG_PlayerCreationRemoveUpSkill:
+        case UIMSG_PlayerCreationRemoveDownSkill: {
+            int order = std::to_underlying(button->msg) - std::to_underlying(UIMSG_48);
+            std::string skill = state.characters[slot].skills[order];
+            return {fmt::format("skill:{}:{}", slot, order), "Skill " + skill};
+        }
+        case UIMSG_0: {
+            int attribute = button->msg_param % 7;
+            std::string label = localization->attributeName(static_cast<Attribute>(attribute));
+            return {fmt::format("stat:{}:{}", slot, attribute),
+                    fmt::format("{} {}", label, state.characters[slot].stats[attribute])};
+        }
+        case UIMSG_PlayerCreationSelectClass: {
+            Class classType = static_cast<Class>(button->msg_param);
+            std::string name = localization->expand(localization->className(classType));
+            bool chosen = state.characters[state.activeSlot].className == name;
+            return {fmt::format("class:{}", button->msg_param),
+                    "Class " + name + (chosen ? ", chosen" : "")};
+        }
+        case UIMSG_PlayerCreationSelectActiveSkill: {
+            Character &character = pParty->pCharacters[state.activeSlot];
+            Skill skill = character.GetSkillIdxByOrder(button->msg_param + 4);
+            std::string name = localization->skillName(skill);
+            bool chosen = character.pActiveSkills[skill];
+            return {fmt::format("available-skill:{}", button->msg_param),
+                    "Available skill " + name + (chosen ? ", chosen" : "")};
+        }
+        case UIMSG_PlayerCreationClickOK:
+            return {"ok", localization->str(LSTR_OK_BUTTON)};
+        case UIMSG_PlayerCreationClickReset:
+            return {"clear", localization->str(LSTR_CLEAR_BUTTON)};
+        case UIMSG_PlayerCreationClickMinus: {
+            int attribute = window.pCurrentPosActiveItem - window.pStartingPosActiveItem;
+            attribute %= 7;
+            return {"decrease", "decrease " + localization->attributeName(static_cast<Attribute>(attribute))};
+        }
+        case UIMSG_PlayerCreationClickPlus: {
+            int attribute = window.pCurrentPosActiveItem - window.pStartingPosActiveItem;
+            attribute %= 7;
+            return {"increase", "increase " + localization->attributeName(static_cast<Attribute>(attribute))};
+        }
+        default:
+            break;
+        }
+    }
+
+    if (Recti(543, 393, 70, 35).contains(pointer))
+        return {"bonus", fmt::format("Bonus points {}", state.bonus)};
+
+    for (int slot = 0; slot < state.characters.size(); ++slot) {
+        int x = 158 * slot;
+        const PartyCharacterState &character = state.characters[slot];
+        if (Recti(x + 85, 24, 68, 35).contains(pointer))
+            return {fmt::format("race:{}", slot), "Race " + character.race};
+        if (Recti(x + 17, 35, 65, 65).contains(pointer))
+            return {fmt::format("portrait:{}", slot), fmt::format("Portrait {}, {}", character.face + 1, character.race)};
+        if (Recti(x + 85, 94, 68, 25).contains(pointer))
+            return {fmt::format("slot-class:{}", slot), "Class " + character.className};
+        if (Recti(x + 5, 21, 153, 365).contains(pointer))
+            return {fmt::format("slot:{}", slot),
+                    fmt::format("Slot {} of 4, {}, {} {}", slot + 1, character.name, character.race, character.className)};
+    }
+    return {};
+}
+
+BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationKeyboardFocus(
+    const GUIWindow &window, const PartyCreationState &state) const {
+    int offset = window.pCurrentPosActiveItem - window.pStartingPosActiveItem;
+    if (offset < 0 || offset >= 28)
+        return {};
+    int slot = offset / 7;
+    int attribute = offset % 7;
+    std::string label = localization->attributeName(static_cast<Attribute>(attribute));
+    return {fmt::format("stat:{}:{}", slot, attribute),
+            fmt::format("{} {}", label, state.characters[slot].stats[attribute])};
+}
+
+std::string BlazonBridge::partyCreationChange(const PartyCreationState &before,
+                                              const PartyCreationState &after) const {
+    auto slotSummary = [](int slot, const PartyCharacterState &character) {
+        return fmt::format("Slot {} of 4, {}, {} {}", slot + 1, character.name, character.race, character.className);
+    };
+    if (before.activeSlot != after.activeSlot)
+        return slotSummary(after.activeSlot, after.characters[after.activeSlot]);
+
+    std::vector<int> changedSlots;
+    for (int slot = 0; slot < after.characters.size(); ++slot) {
+        if (before.characters[slot] != after.characters[slot])
+            changedSlots.push_back(slot);
+    }
+    if (changedSlots.size() > 1)
+        return "Party cleared. " + slotSummary(after.activeSlot, after.characters[after.activeSlot]);
+    if (changedSlots.empty())
+        return before.bonus == after.bonus ? std::string() : fmt::format("Bonus points {}", after.bonus);
+
+    int slot = changedSlots.front();
+    const PartyCharacterState &oldCharacter = before.characters[slot];
+    const PartyCharacterState &character = after.characters[slot];
+    std::string prefix = slot == after.activeSlot ? std::string() : fmt::format("Slot {}, ", slot + 1);
+    if (oldCharacter.face != character.face) {
+        std::string change = fmt::format("Race {}, portrait {}", character.race, character.face + 1);
+        if (oldCharacter.name != character.name)
+            change += ", Name " + character.name;
+        return prefix + change;
+    }
+    if (oldCharacter.voice != character.voice)
+        return prefix + fmt::format("Voice {}", character.voice + 1);
+    if (oldCharacter.className != character.className)
+        return prefix + "Class " + character.className;
+
+    auto containsSkill = [](const std::array<std::string, 4> &skills, const std::string &skill) {
+        return std::find(skills.begin(), skills.end(), skill) != skills.end();
+    };
+    for (const std::string &skill : character.skills) {
+        if (!containsSkill(oldCharacter.skills, skill))
+            return prefix + "Skill " + skill + " chosen";
+    }
+    for (const std::string &skill : oldCharacter.skills) {
+        if (!containsSkill(character.skills, skill))
+            return prefix + "Skill " + skill + " removed";
+    }
+    if (oldCharacter.name != character.name)
+        return prefix + "Name " + character.name;
+    for (int attribute = 0; attribute < character.stats.size(); ++attribute) {
+        if (oldCharacter.stats[attribute] == character.stats[attribute])
+            continue;
+        return prefix + fmt::format("{} {}, bonus points {}",
+                                    localization->attributeName(static_cast<Attribute>(attribute)),
+                                    character.stats[attribute], after.bonus);
+    }
+    return before.bonus == after.bonus ? std::string() : fmt::format("Bonus points {}", after.bonus);
+}
+
+bool BlazonBridge::emitPartyCreationState(const PartyCreationState &state) {
+    const PartyCharacterState &character = state.characters[state.activeSlot];
+    std::string key = fmt::format("{}\x1f{}\x1f{}\x1f{}\x1f{}", state.activeSlot, character.name,
+                                  character.race, character.className, state.bonus);
+    for (int value : character.stats)
+        key += "\x1f" + std::to_string(value);
+    for (const std::string &skill : character.skills)
+        key += "\x1f" + skill;
+    if (key == _partyCreationStateKey)
+        return true;
+
+    std::string instance = "mm7/party-creation/" + std::to_string(_partyCreationInstance);
+    std::string collection = instance + "/character";
+    std::string subjectId = "mm7/party-creation/slot/" + std::to_string(state.activeSlot + 1);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", subjectId, "race",
+                                   "Character::GetRaceName", "GUIWindow_PartyCreation::Update", character.race));
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", subjectId, "class",
+                                   "Localization::className", "GUIWindow_PartyCreation::Update", character.className));
+    static constexpr std::array<const char *, 7> statKeys = {
+        "might", "intellect", "personality", "endurance", "accuracy", "speed", "luck",
+    };
+    for (int attribute = 0; attribute < statKeys.size(); ++attribute) {
+        fields.push_back(makeIntegerField(instance, collection, "party_creation_instance", subjectId,
+                                          statKeys[attribute], "Character::GetActualAttribute",
+                                          "GUIWindow_PartyCreation::Update",
+                                          localization->attributeName(static_cast<Attribute>(attribute)),
+                                          character.stats[attribute]));
+    }
+    std::string skills;
+    for (const std::string &skill : character.skills) {
+        if (!skills.empty())
+            skills += ", ";
+        skills += skill;
+    }
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", subjectId, "skills",
+                                   "Character::GetSkillIdxByOrder and Localization::skillName",
+                                   "GUIWindow_PartyCreation::Update", skills));
+    fields.push_back(makeField(instance, collection, "party_creation_instance", subjectId.c_str(), "bonus",
+                               "CharacterCreation_GetUnspentAttributePointCount", "GUIWindow_PartyCreation::Update",
+                               Json{{"type", "integer"}, {"integer", state.bonus}, {"display", std::to_string(state.bonus)}}));
+    std::string operations = makeCollection(_sourceRun, instance, collection, "party_creation_instance",
+                                            kPartyCreationStateCollectionKind, subjectId, "character",
+                                            "Party::pCharacters", character.name,
+                                            "GUIWindow_PartyCreation::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _partyCreationStateKey = std::move(key);
+    _partyCreationOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitPartyCreationEntry(const PartyCreationState &state) {
+    if (_partyCreationEntryEmitted)
+        return true;
+    const PartyCharacterState &character = state.characters[state.activeSlot];
+    std::string instance = "mm7/party-creation/" + std::to_string(_partyCreationInstance);
+    std::string collection = instance + "/entry";
+    Json fields = Json::array();
+    fields.push_back(makeField(instance, collection, "party_creation_instance", kPartyCreationSubjectId,
+                               "entry_slot", "GUIWindow::pCurrentPosActiveItem", "GUIWindow_PartyCreation::Update",
+                               Json{{"type", "integer"}, {"integer", state.activeSlot + 1},
+                                    {"display", std::to_string(state.activeSlot + 1)}}));
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", kPartyCreationSubjectId,
+                                   "entry_name", "Character::name", "GUIWindow_PartyCreation::Update", character.name));
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", kPartyCreationSubjectId,
+                                   "entry_race", "Character::GetRaceName", "GUIWindow_PartyCreation::Update", character.race));
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", kPartyCreationSubjectId,
+                                   "entry_class", "Localization::className", "GUIWindow_PartyCreation::Update", character.className));
+    std::string operations = makeCollection(_sourceRun, instance, collection, "party_creation_instance",
+                                            kPartyCreationEntryCollectionKind, kPartyCreationSubjectId, "screen",
+                                            "GUIWindow_PartyCreation", "Create Party",
+                                            "GUIWindow_PartyCreation::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _partyCreationEntryEmitted = true;
+    _partyCreationEntryOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitPartyCreationFocus(const PartyCreationFocus &focus) {
+    if (_partyCreationFocusInstance != 0) {
+        endLifetime("party_creation_focus_instance",
+                    "mm7/party-creation/focus/" + std::to_string(_partyCreationFocusInstance));
+        _partyCreationFocusInstance = 0;
+        _partyCreationFocusOperations.clear();
+    }
+    if (focus.text.empty())
+        return true;
+
+    uint64_t number = ++_instanceSequence;
+    std::string instance = "mm7/party-creation/focus/" + std::to_string(number);
+    std::string collection = instance + "/state";
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "party_creation_focus_instance", kPartyCreationSubjectId,
+                                   "focus", "GUIWindow::vButtons and pointer or keyboard focus",
+                                   "GUIWindow_PartyCreation::Update", focus.text));
+    std::string operations = makeCollection(_sourceRun, instance, collection, "party_creation_focus_instance",
+                                            kPartyCreationFocusCollectionKind, kPartyCreationSubjectId, "screen",
+                                            "GUIWindow_PartyCreation", "Create Party",
+                                            "GUIWindow_PartyCreation::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _partyCreationFocusInstance = number;
+    _partyCreationFocusOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitPartyCreationChange(const std::string &text) {
+    if (text.empty())
+        return true;
+    std::string instance = "mm7/party-creation/" + std::to_string(_partyCreationInstance);
+    std::string collection = instance + "/change";
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "party_creation_instance", kPartyCreationSubjectId,
+                                   "change", "difference between consecutive party creation states",
+                                   "GUIWindow_PartyCreation::Update", text));
+    std::string operations = makeCollection(_sourceRun, instance, collection, "party_creation_instance",
+                                            kPartyCreationChangeCollectionKind, kPartyCreationSubjectId, "screen",
+                                            "GUIWindow_PartyCreation", "Create Party",
+                                            "GUIWindow_PartyCreation::Update", std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _partyCreationChangeOperations = std::move(operations);
+    return true;
+}
+
+void BlazonBridge::observePartyCreation(GUIWindow &window) {
+    if (!_enabled)
+        return;
+    if (_partyCreationInstance == 0) {
+        _partyCreationInstance = ++_instanceSequence;
+        _partyCreationStateSeen = false;
+        _partyCreationEntryEmitted = false;
+        _partyCreationStateKey.clear();
+        _partyCreationPointerKey.clear();
+        _partyCreationKeyboardKey.clear();
+        _partyCreationOperations.clear();
+        _partyCreationEntryOperations.clear();
+        _partyCreationFocusOperations.clear();
+        _partyCreationChangeOperations.clear();
+    }
+
+    PartyCreationState state = partyCreationState();
+    emitPartyCreationState(state);
+    emitPartyCreationEntry(state);
+    PartyCreationFocus pointerFocus = partyCreationPointerFocus(window, state);
+    PartyCreationFocus keyboardFocus = partyCreationKeyboardFocus(window, state);
+    if (!_partyCreationStateSeen) {
+        _partyCreationStateSeen = true;
+        _partyCreationState = state;
+        _partyCreationPointerKey = pointerFocus.key;
+        _partyCreationKeyboardKey = keyboardFocus.key;
+        return;
+    }
+
+    if (state != _partyCreationState) {
+        std::string change = partyCreationChange(_partyCreationState, state);
+        if (emitPartyCreationChange(change))
+            _partyCreationState = state;
+        _partyCreationPointerKey = pointerFocus.key;
+        _partyCreationKeyboardKey = keyboardFocus.key;
+        return;
+    }
+
+    if (pointerFocus.key != _partyCreationPointerKey) {
+        if (emitPartyCreationFocus(pointerFocus)) {
+            _partyCreationPointerKey = pointerFocus.key;
+            _partyCreationKeyboardKey = keyboardFocus.key;
+        }
+    } else if (keyboardFocus.key != _partyCreationKeyboardKey) {
+        if (emitPartyCreationFocus(keyboardFocus)) {
+            _partyCreationPointerKey = pointerFocus.key;
+            _partyCreationKeyboardKey = keyboardFocus.key;
+        }
+    }
+}
+
+void BlazonBridge::endPartyCreation() {
+    if (!_enabled || _partyCreationInstance == 0)
+        return;
+    if (_partyCreationFocusInstance != 0) {
+        endLifetime("party_creation_focus_instance",
+                    "mm7/party-creation/focus/" + std::to_string(_partyCreationFocusInstance));
+        _partyCreationFocusInstance = 0;
+    }
+    endLifetime("party_creation_instance", "mm7/party-creation/" + std::to_string(_partyCreationInstance));
+    _partyCreationInstance = 0;
+    _partyCreationStateSeen = false;
+    _partyCreationEntryEmitted = false;
+    _partyCreationStateKey.clear();
+    _partyCreationPointerKey.clear();
+    _partyCreationKeyboardKey.clear();
+    _partyCreationOperations.clear();
+    _partyCreationEntryOperations.clear();
+    _partyCreationFocusOperations.clear();
+    _partyCreationChangeOperations.clear();
+}
+
 void BlazonBridge::observePopupHold(bool holding) {
     if (!_enabled)
         return;
@@ -737,6 +1141,10 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _dialogueFocusOperations);
     appendOperations(operations, _houseOperations);
     appendOperations(operations, _houseFocusOperations);
+    appendOperations(operations, _partyCreationOperations);
+    appendOperations(operations, _partyCreationEntryOperations);
+    appendOperations(operations, _partyCreationFocusOperations);
+    appendOperations(operations, _partyCreationChangeOperations);
     if (operations.empty())
         return true;
     return sendTransactionDatagram(operations.dump(-1, ' ', false, Json::error_handler_t::replace), true);
