@@ -63,6 +63,42 @@ HitMap<int> equipmentHitMap;
 
 int bRingsShownInCharScreen;  // 5118E0
 
+ItemSlot CharacterUI_RingOverlaySlotAt(Pointi position) {
+    static constexpr std::array<Pointi, 6> ringPositions = {{
+        {0x1EA, 0x0CA}, {0x21A, 0x0CA}, {0x248, 0x0CA},
+        {0x1EA, 0x0FA}, {0x21A, 0x0FA}, {0x248, 0x0FA},
+    }};
+    static constexpr int cellSize = 32;
+
+    if (position.x >= 493 && position.x <= 493 + cellSize &&
+        position.y >= 91 && position.y <= 91 + 2 * cellSize) {
+        return ITEM_SLOT_AMULET;
+    }
+    if (position.x >= 586 && position.x <= 586 + cellSize &&
+        position.y >= 88 && position.y <= 88 + 2 * cellSize) {
+        return ITEM_SLOT_GAUNTLETS;
+    }
+    for (size_t index = 0; index < ringPositions.size(); ++index) {
+        Pointi ring = ringPositions[index];
+        if (position.x >= ring.x && position.x <= ring.x + cellSize &&
+            position.y >= ring.y && position.y <= ring.y + cellSize) {
+            return ringSlot(static_cast<int>(index));
+        }
+    }
+    return ITEM_SLOT_INVALID;
+}
+
+int CharacterUI_BlazonEquipmentAt(Pointi position, Character &character) {
+    if (!bRingsShownInCharScreen)
+        return equipmentHitMap.query(position, -1);
+
+    ItemSlot slot = CharacterUI_RingOverlaySlotAt(position);
+    if (slot == ITEM_SLOT_INVALID)
+        return -1;
+    InventoryEntry entry = character.inventory.entry(slot);
+    return entry ? entry.index() : -1;
+}
+
 Color ui_mainmenu_copyright_color;
 
 Color ui_character_tooltip_header_default_color;

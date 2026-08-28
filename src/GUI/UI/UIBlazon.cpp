@@ -1322,7 +1322,7 @@ BlazonBridge::CharacterRecordFocus BlazonBridge::characterRecordPointerFocus(
         }
     }
 
-    int itemIndex = equipmentHitMap.query(pointer, -1);
+    int itemIndex = CharacterUI_BlazonEquipmentAt(pointer, character);
     InventoryEntry entry = character.inventory.entry(itemIndex);
     if (entry) {
         return {fmt::format("equipped:{}", itemIndex),

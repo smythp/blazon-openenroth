@@ -5,6 +5,7 @@
 
 #include "Engine/HitMap.h"
 #include "Engine/Data/AwardEnums.h"
+#include "Engine/Objects/ItemEnums.h"
 
 #include "GUI/GUIWindow.h"
 
@@ -64,6 +65,11 @@ class GUIWindow_CharacterRecord : public GUIWindow {
 };
 
 bool ringscreenactive();
+
+class Character;
+
+ItemSlot CharacterUI_RingOverlaySlotAt(Pointi position);
+int CharacterUI_BlazonEquipmentAt(Pointi position, Character &character);
 
 class GraphicsImage;
 extern GraphicsImage *ui_character_skills_background;
