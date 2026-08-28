@@ -1,4 +1,5 @@
 #include "UIBlazon.h"
+#include "UIBlazonPartyCreation.h"
 
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -653,6 +654,7 @@ BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationPointerFocus(
         }
         case UIMSG_0: {
             int attribute = button->msg_param % 7;
+            slot = BlazonPartyCreation::statSlot(button->msg_param);
             std::string label = localization->attributeName(static_cast<Attribute>(attribute));
             return {fmt::format("stat:{}:{}", slot, attribute),
                     fmt::format("{} {}", label, state.characters[slot].stats[attribute])};
@@ -755,17 +757,10 @@ std::string BlazonBridge::partyCreationChange(const PartyCreationState &before,
     if (oldCharacter.className != character.className)
         return prefix + "Class " + character.className;
 
-    auto containsSkill = [](const std::array<std::string, 4> &skills, const std::string &skill) {
-        return std::find(skills.begin(), skills.end(), skill) != skills.end();
-    };
-    for (const std::string &skill : character.skills) {
-        if (!containsSkill(oldCharacter.skills, skill))
-            return prefix + "Skill " + skill + " chosen";
-    }
-    for (const std::string &skill : oldCharacter.skills) {
-        if (!containsSkill(character.skills, skill))
-            return prefix + "Skill " + skill + " removed";
-    }
+    std::string skillChange = BlazonPartyCreation::skillChange(
+        oldCharacter.skills, character.skills, localization->skillName(SKILL_INVALID));
+    if (!skillChange.empty())
+        return prefix + skillChange;
     if (oldCharacter.name != character.name)
         return prefix + "Name " + character.name;
     for (int attribute = 0; attribute < character.stats.size(); ++attribute) {

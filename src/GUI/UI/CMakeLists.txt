@@ -50,6 +50,7 @@ set(GUI_UI_HEADERS
         UISpell.h
         UIStatusBar.h
         UIBlazon.h
+        UIBlazonPartyCreation.h
         UITransition.h
         UIMessageScroll.h)
 
@@ -68,3 +69,14 @@ target_link_libraries(gui_ui
 
 add_subdirectory(Books)
 add_subdirectory(Houses)
+
+if(OE_BUILD_TESTS)
+    set(TEST_GUI_UI_SOURCES Tests/UIBlazonPartyCreation_ut.cpp)
+
+    add_library(test_gui_ui OBJECT ${TEST_GUI_UI_SOURCES})
+    target_link_libraries(test_gui_ui PUBLIC testing_unit)
+
+    target_check_style(test_gui_ui)
+
+    target_link_libraries(OpenEnroth_UnitTest PUBLIC test_gui_ui)
+endif()
