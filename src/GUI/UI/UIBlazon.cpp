@@ -372,18 +372,19 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     std::string body;
     for (const std::string &part : _houseBody)
         appendSentence(body, part);
-    if (body.empty())
-        body = "No message";
-    if (options.empty())
-        options = "none";
 
-    // The heading rides along only on the first read of a house. Stepping into a
-    // submenu should say what the submenu says, not the proprietor's name again.
-    std::string spoken = body;
-    if (!_houseEmitted) {
+    // Compose from what the screen actually has. The heading rides along only on
+    // the first read of a house, so stepping into a submenu says what the submenu
+    // says rather than the proprietor's name again, and a screen with no message
+    // reads as a bare option list rather than announcing that it has no message.
+    std::string spoken;
+    if (!_houseEmitted)
         spoken = heading;
-        appendSentence(spoken, body);
-    }
+    appendSentence(spoken, body);
+    if (!options.empty())
+        appendSentence(spoken, spoken.empty() ? options : "Options: " + options);
+    if (spoken.empty())
+        return;
 
     std::string key = heading + "\x1f" + body + "\x1f" + options;
     if (key == _houseKey) {
@@ -394,10 +395,15 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     std::string collection = instance + "/state";
     std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
     Json fields = Json::array();
-    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "body",
-                                   "house greeting or response", "GUIWindow_House::Update", spoken));
-    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "options",
-                                   "house dialogue option labels", "GUIWindow_House::Update", options));
+    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "say",
+                                   "composed from the heading, message and options actually present",
+                                   "GUIWindow_House::Update", spoken));
+    if (!body.empty())
+        fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "body",
+                                       "house greeting or response", "GUIWindow_House::Update", body));
+    if (!options.empty())
+        fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "options",
+                                       "house dialogue option labels", "GUIWindow_House::Update", options));
     if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance", kHouseCollectionKind,
                                        subjectId, "house", "GUIWindow_House::houseId", heading,
                                        "GUIWindow_House::Update", std::move(fields)))) {
