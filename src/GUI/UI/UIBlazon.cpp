@@ -668,7 +668,7 @@ BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationPointerFocus(
             Character &character = pParty->pCharacters[state.activeSlot];
             Skill skill = character.GetSkillIdxByOrder(button->msg_param + 4);
             std::string name = localization->skillName(skill);
-            bool chosen = character.pActiveSkills[skill];
+            bool chosen = static_cast<bool>(character.pActiveSkills[skill]);
             return {fmt::format("available-skill:{}", button->msg_param),
                     "Available skill " + name + (chosen ? ", chosen" : "")};
         }
