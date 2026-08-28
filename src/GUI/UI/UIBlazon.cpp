@@ -693,6 +693,7 @@ void BlazonBridge::sendInput(const char *action) {
         {"type", "input"},
         {"action", action},
         {"source_run", _sourceRun},
+        {"screen", static_cast<int>(current_screen_type)},
         {"input_id", _sourceRun + ":input:" + std::to_string(sequence)},
     };
     if (sendDatagram(input.dump()))

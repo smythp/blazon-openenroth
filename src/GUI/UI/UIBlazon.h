@@ -107,7 +107,7 @@ class BlazonBridge {
     /**
      * Explicit Blazon command from a key press.
      *
-     * @param action                    "stop" or "read_collection".
+     * @param action                    "capture", "stop", "read_collection" or "mark".
      */
     void sendInput(const char *action);
 

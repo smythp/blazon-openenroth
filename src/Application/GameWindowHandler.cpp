@@ -289,9 +289,12 @@ void GameWindowHandler::OnKey(PlatformKey key) {
     if (!keyboardInputHandler || !keyboardActionMapping)
         return;
 
-    // Blazon keys are fixed for now. F3 stops speech, F4 reads what is under the
-    // pointer, F6 flags this moment for later analysis.
-    if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F3) {
+    // Blazon keys are fixed for now. F1 captures the current state, F3 stops speech,
+    // F4 reads what is under the pointer, F6 flags this moment for later analysis.
+    if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F1) {
+        BlazonBridge::instance().sendInput("capture");
+        return;
+    } else if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F3) {
         BlazonBridge::instance().sendInput("stop");
         return;
     } else if (BlazonBridge::instance().enabled() && key == PlatformKey::KEY_F4) {
