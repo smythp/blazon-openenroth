@@ -1,10 +1,11 @@
-#include "GUI/UI/UIBlazon.h"
 #include "UIDialogue.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
-#include <string>
+
+#include "GUI/UI/UIBlazon.h"
 
 #include "Engine/Graphics/Renderer/Renderer.h"
 #include "Engine/Graphics/Image.h"
