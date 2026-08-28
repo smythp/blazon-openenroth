@@ -1,6 +1,6 @@
-#include "Testing/Unit/UnitTest.h"
-
 #include <string>
+
+#include "Testing/Unit/UnitTest.h"
 
 #include "GUI/UI/UIBlazonPartyCreation.h"
 
