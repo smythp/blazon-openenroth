@@ -42,8 +42,9 @@ class BlazonBridge {
      *
      * @param text                      Event text, empty when no event is showing.
      * @param stamp                     The event's expiry tick, zero when none is showing.
+     * @param hook                      Status bar setter that produced the event.
      */
-    void observeEvent(std::string_view text, int stamp);
+    void observeEvent(std::string_view text, int stamp, const char *hook);
 
     /**
      * Per-frame observation of the right-button hold. A rising edge begins a
@@ -136,7 +137,7 @@ class BlazonBridge {
     void emitPopup(const std::string &text);
     void endPopup();
     void emitRawDraw(std::string_view text, int x, int y, int w, int h);
-    void beginEvent(const std::string &text);
+    void beginEvent(const std::string &text, const char *hook);
     void endEvent();
 
     std::string _socketPath;
@@ -189,6 +190,7 @@ class BlazonBridge {
     bool _dialogueFocusSeen = false;
     std::string _dialogueFocusText;
     std::string _dialogueOperations;
+    std::string _dialogueFocusOperations;
 
     void sendHeartbeat();
 

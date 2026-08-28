@@ -66,18 +66,18 @@ void StatusBar::clearAll() {
 void StatusBar::setEvent(std::string_view str) {
     _eventStatusString = str;
     _eventStatusExpireTime = platform->tickCount() + EVENT_DURATION;
-    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime);
+    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime, "StatusBar::setEvent");
 }
 
 void StatusBar::setEventShort(std::string_view str) {
     _eventStatusString = str;
     _eventStatusExpireTime = platform->tickCount() + EVENT_DURATION_SHORT;
-    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime);
+    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime, "StatusBar::setEventShort");
 }
 
 void StatusBar::clearEvent() {
     _eventStatusExpireTime = 0;
-    BlazonBridge::instance().observeEvent({}, 0);
+    BlazonBridge::instance().observeEvent({}, 0, "StatusBar::clearEvent");
 }
 
 void StatusBar::nothingHere() {

@@ -6,9 +6,11 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <exception>
 #include <random>
 #include <string>
 #include <utility>
@@ -143,6 +145,17 @@ void appendOperations(Json &out, const std::string &operationsJson) {
         out.push_back(std::move(operation));
 }
 
+uint64_t makeRunToken() {
+    try {
+        std::random_device randomDevice;
+        std::uniform_int_distribution<uint64_t> tokenDistribution;
+        return tokenDistribution(randomDevice);
+    } catch (const std::exception &) {
+        uint64_t clock = static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        return clock ^ (static_cast<uint64_t>(getpid()) << 32);
+    }
+}
+
 void appendSentence(std::string &out, const std::string &part) {
     if (part.empty())
         return;
@@ -175,9 +188,7 @@ BlazonBridge::BlazonBridge() {
     gmtime_r(&now, &utc);
     char stamp[32];
     std::strftime(stamp, sizeof(stamp), "%Y%m%dT%H%M%S", &utc);
-    std::random_device randomDevice;
-    std::uniform_int_distribution<uint64_t> tokenDistribution;
-    std::string token = fmt::format("{:016x}", tokenDistribution(randomDevice));
+    std::string token = fmt::format("{:016x}", makeRunToken());
     _sourceRun = std::string("openenroth-mm7:") + stamp + ":pid" + std::to_string(getpid()) + ":random" + token;
     _startedAt = now;
     // BLAZON_HEARTBEAT_SECONDS=0 silences the liveness pings once the loop is stable.
@@ -273,21 +284,21 @@ void BlazonBridge::endPointer() {
     _currentOperations.clear();
 }
 
-void BlazonBridge::observeEvent(std::string_view text, int stamp) {
+void BlazonBridge::observeEvent(std::string_view text, int stamp, const char *hook) {
     if (!_enabled)
         return;
     if (_eventInstance != 0)
         endEvent();
     if (stamp != 0 && !text.empty())
-        beginEvent(std::string(text));
+        beginEvent(std::string(text), hook);
 }
 
-void BlazonBridge::beginEvent(const std::string &text) {
+void BlazonBridge::beginEvent(const std::string &text, const char *hook) {
     uint64_t number = ++_instanceSequence;
     std::string instance = "mm7/status-event/" + std::to_string(number);
     std::string operations = makeTextCollection(_sourceRun, instance, "event_instance", kEventCollectionKind,
                                                 kGameSubjectId, "game", "Engine",
-                                                "StatusBar::_eventStatusString", "StatusBar::setEvent", text, "event");
+                                                "StatusBar::_eventStatusString", hook, text, "event");
     if (sendTransaction(operations)) {
         _eventInstance = number;
         _eventOperations = std::move(operations);
@@ -309,6 +320,7 @@ void BlazonBridge::beginMessage() {
     _messageInstance = ++_instanceSequence;
     _messageEmitted = false;
     _messageText.clear();
+    _messageOperations.clear();
 }
 
 void BlazonBridge::observeMessage(std::string_view body) {
@@ -484,6 +496,8 @@ void BlazonBridge::beginDialogue(int npcId) {
     _dialogueKey.clear();
     _dialogueFocusSeen = false;
     _dialogueFocusText.clear();
+    _dialogueOperations.clear();
+    _dialogueFocusOperations.clear();
 }
 
 void BlazonBridge::observeDialogue(int npcId, std::string_view name, std::string_view body,
@@ -540,10 +554,13 @@ void BlazonBridge::observeDialogue(int npcId, std::string_view name, std::string
     Json fields = Json::array();
     fields.push_back(makeTextField(instance, collection, "dialogue_instance", subjectId, "option",
                                    "GUIWindow::pCurrentPosActiveItem", "GUIWindow_Dialogue::Update", focus));
-    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "dialogue_instance", kDialogueFocusCollectionKind,
-                                       subjectId, "npc", "speakingNpcId", subjectName, "GUIWindow_Dialogue::Update",
-                                       std::move(fields))))
+    std::string operations = makeCollection(_sourceRun, instance, collection, "dialogue_instance",
+                                            kDialogueFocusCollectionKind, subjectId, "npc", "speakingNpcId",
+                                            subjectName, "GUIWindow_Dialogue::Update", std::move(fields));
+    if (sendTransaction(operations)) {
         _dialogueFocusText = focus;
+        _dialogueFocusOperations = std::move(operations);
+    }
 }
 
 void BlazonBridge::endDialogue() {
@@ -553,6 +570,7 @@ void BlazonBridge::endDialogue() {
     _dialogueInstance = 0;
     _dialogueEmitted = false;
     _dialogueOperations.clear();
+    _dialogueFocusOperations.clear();
 }
 
 void BlazonBridge::observePopupHold(bool holding) {
@@ -565,6 +583,7 @@ void BlazonBridge::observePopupHold(bool holding) {
         _popupInstance = ++_instanceSequence;
         _popupEmitted = false;
         _popupText.clear();
+        _popupOperations.clear();
     } else if (!holding && _popupHolding) {
         endPopup();
         _popupHolding = false;
@@ -714,6 +733,7 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _eventOperations);
     appendOperations(operations, _messageOperations);
     appendOperations(operations, _dialogueOperations);
+    appendOperations(operations, _dialogueFocusOperations);
     appendOperations(operations, _houseOperations);
     appendOperations(operations, _houseFocusOperations);
     if (operations.empty())
