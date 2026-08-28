@@ -126,8 +126,8 @@ class BlazonBridge {
     /**
      * Plain text of a font-formatted string, control codes removed.
      *
-     * @param text                      Text with \f, \t, \r, \n codes.
-     * @return                          Text without codes, positioning codes become spaces.
+     * @param text                      UTF-8 or MM7 Windows-1252 text with \f, \t, \r, \n codes.
+     * @return                          UTF-8 text without codes, positioning codes become spaces.
      */
     static std::string stripFontCodes(std::string_view text);
 

@@ -31,6 +31,7 @@
 #include "Io/Mouse.h"
 
 #include "Library/Logger/Logger.h"
+#include "Utility/String/Encoding.h"
 #include "Utility/String/Format.h"
 
 namespace {
@@ -153,7 +154,6 @@ std::string makeTextCollection(const std::string &sourceRun, const std::string &
         }},
         {"pieces", fields},
     };
-    // MM7 strings are cp1252, so anything outside UTF-8 becomes U+FFFD rather than an exception.
     return Json::array({upsert, replace}).dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 
@@ -188,6 +188,56 @@ void appendSentence(std::string &out, const std::string &part) {
         out += (last == '.' || last == '!' || last == '?' || last == ':' || last == ',') ? " " : ". ";
     }
     out += part;
+}
+
+bool isValidUtf8(std::string_view text) {
+    for (size_t i = 0; i < text.size();) {
+        unsigned char first = static_cast<unsigned char>(text[i]);
+        if (first <= 0x7f) {
+            ++i;
+            continue;
+        }
+
+        size_t length;
+        unsigned char secondMin = 0x80;
+        unsigned char secondMax = 0xbf;
+        if (first >= 0xc2 && first <= 0xdf) {
+            length = 2;
+        } else if (first >= 0xe0 && first <= 0xef) {
+            length = 3;
+            if (first == 0xe0)
+                secondMin = 0xa0;
+            else if (first == 0xed)
+                secondMax = 0x9f;
+        } else if (first >= 0xf0 && first <= 0xf4) {
+            length = 4;
+            if (first == 0xf0)
+                secondMin = 0x90;
+            else if (first == 0xf4)
+                secondMax = 0x8f;
+        } else {
+            return false;
+        }
+
+        if (i + length > text.size())
+            return false;
+        unsigned char second = static_cast<unsigned char>(text[i + 1]);
+        if (second < secondMin || second > secondMax)
+            return false;
+        for (size_t offset = 2; offset < length; ++offset) {
+            unsigned char continuation = static_cast<unsigned char>(text[i + offset]);
+            if (continuation < 0x80 || continuation > 0xbf)
+                return false;
+        }
+        i += length;
+    }
+    return true;
+}
+
+std::string gameTextToUtf8(std::string_view text) {
+    if (isValidUtf8(text))
+        return std::string(text);
+    return txt::encodedToUtf8(text, ENCODING_WINDOWS_1252);
 }
 
 }  // namespace
@@ -274,17 +324,18 @@ std::string BlazonBridge::stripFontCodes(std::string_view text) {
     while (!result.empty() && result.back() == ' ')
         result.pop_back();
     size_t start = result.find_first_not_of(' ');
-    return start == std::string::npos ? std::string() : result.substr(start);
+    return gameTextToUtf8(start == std::string::npos ? std::string_view() : std::string_view(result).substr(start));
 }
 
 void BlazonBridge::observeStatus(std::string_view text) {
     if (!_enabled)
         return;
-    if (text == _currentText && (_currentInstance != 0 || text.empty()))
+    std::string utf8 = gameTextToUtf8(text);
+    if (utf8 == _currentText && (_currentInstance != 0 || utf8.empty()))
         return;
     if (_currentInstance != 0)
         endPointer();
-    _currentText.assign(text.data(), text.size());
+    _currentText = std::move(utf8);
     if (!_currentText.empty())
         beginPointer(_currentText);
 }
@@ -314,7 +365,7 @@ void BlazonBridge::observeEvent(std::string_view text, int stamp, const char *ho
     if (_eventInstance != 0)
         endEvent();
     if (stamp != 0 && !text.empty())
-        beginEvent(std::string(text), hook);
+        beginEvent(gameTextToUtf8(text), hook);
 }
 
 void BlazonBridge::beginEvent(const std::string &text, const char *hook) {
@@ -602,9 +653,9 @@ BlazonBridge::PartyCreationState BlazonBridge::partyCreationState() const {
     for (int slot = 0; slot < result.characters.size(); ++slot) {
         Character &character = pParty->pCharacters[slot];
         PartyCharacterState &out = result.characters[slot];
-        out.name = character.name;
-        out.race = character.GetRaceName();
-        out.className = localization->expand(localization->className(character.classType));
+        out.name = gameTextToUtf8(character.name);
+        out.race = gameTextToUtf8(character.GetRaceName());
+        out.className = gameTextToUtf8(localization->expand(localization->className(character.classType)));
         out.face = character.uCurrentFace;
         out.voice = character.uVoiceID;
         out.stats = {
@@ -617,7 +668,7 @@ BlazonBridge::PartyCreationState BlazonBridge::partyCreationState() const {
             character.GetActualLuck(),
         };
         for (int index = 0; index < out.skills.size(); ++index)
-            out.skills[index] = localization->skillName(character.GetSkillIdxByOrder(index));
+            out.skills[index] = gameTextToUtf8(localization->skillName(character.GetSkillIdxByOrder(index)));
     }
     result.activeSlot = std::clamp((pGUIWindow_CurrentMenu->pCurrentPosActiveItem -
                                     pGUIWindow_CurrentMenu->pStartingPosActiveItem) / 7, 0, 3);
@@ -655,13 +706,13 @@ BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationPointerFocus(
         case UIMSG_0: {
             int attribute = button->msg_param % 7;
             slot = BlazonPartyCreation::statSlot(button->msg_param);
-            std::string label = localization->attributeName(static_cast<Attribute>(attribute));
+            std::string label = gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute)));
             return {fmt::format("stat:{}:{}", slot, attribute),
                     fmt::format("{} {}", label, state.characters[slot].stats[attribute])};
         }
         case UIMSG_PlayerCreationSelectClass: {
             Class classType = static_cast<Class>(button->msg_param);
-            std::string name = localization->expand(localization->className(classType));
+            std::string name = gameTextToUtf8(localization->expand(localization->className(classType)));
             bool chosen = state.characters[state.activeSlot].className == name;
             return {fmt::format("class:{}", button->msg_param),
                     "Class " + name + (chosen ? ", chosen" : "")};
@@ -669,24 +720,24 @@ BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationPointerFocus(
         case UIMSG_PlayerCreationSelectActiveSkill: {
             Character &character = pParty->pCharacters[state.activeSlot];
             Skill skill = character.GetSkillIdxByOrder(button->msg_param + 4);
-            std::string name = localization->skillName(skill);
+            std::string name = gameTextToUtf8(localization->skillName(skill));
             bool chosen = static_cast<bool>(character.pActiveSkills[skill]);
             return {fmt::format("available-skill:{}", button->msg_param),
                     "Available skill " + name + (chosen ? ", chosen" : "")};
         }
         case UIMSG_PlayerCreationClickOK:
-            return {"ok", localization->str(LSTR_OK_BUTTON)};
+            return {"ok", gameTextToUtf8(localization->str(LSTR_OK_BUTTON))};
         case UIMSG_PlayerCreationClickReset:
-            return {"clear", localization->str(LSTR_CLEAR_BUTTON)};
+            return {"clear", gameTextToUtf8(localization->str(LSTR_CLEAR_BUTTON))};
         case UIMSG_PlayerCreationClickMinus: {
             int attribute = window.pCurrentPosActiveItem - window.pStartingPosActiveItem;
             attribute %= 7;
-            return {"decrease", "decrease " + localization->attributeName(static_cast<Attribute>(attribute))};
+            return {"decrease", "decrease " + gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute)))};
         }
         case UIMSG_PlayerCreationClickPlus: {
             int attribute = window.pCurrentPosActiveItem - window.pStartingPosActiveItem;
             attribute %= 7;
-            return {"increase", "increase " + localization->attributeName(static_cast<Attribute>(attribute))};
+            return {"increase", "increase " + gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute)))};
         }
         default:
             break;
@@ -719,7 +770,7 @@ BlazonBridge::PartyCreationFocus BlazonBridge::partyCreationKeyboardFocus(
         return {};
     int slot = offset / 7;
     int attribute = offset % 7;
-    std::string label = localization->attributeName(static_cast<Attribute>(attribute));
+    std::string label = gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute)));
     return {fmt::format("stat:{}:{}", slot, attribute),
             fmt::format("{} {}", label, state.characters[slot].stats[attribute])};
 }
@@ -758,7 +809,7 @@ std::string BlazonBridge::partyCreationChange(const PartyCreationState &before,
         return prefix + "Class " + character.className;
 
     std::string skillChange = BlazonPartyCreation::skillChange(
-        oldCharacter.skills, character.skills, localization->skillName(SKILL_INVALID));
+        oldCharacter.skills, character.skills, gameTextToUtf8(localization->skillName(SKILL_INVALID)));
     if (!skillChange.empty())
         return prefix + skillChange;
     if (oldCharacter.name != character.name)
@@ -767,7 +818,7 @@ std::string BlazonBridge::partyCreationChange(const PartyCreationState &before,
         if (oldCharacter.stats[attribute] == character.stats[attribute])
             continue;
         return prefix + fmt::format("{} {}, bonus points {}",
-                                    localization->attributeName(static_cast<Attribute>(attribute)),
+                                    gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute))),
                                     character.stats[attribute], after.bonus);
     }
     return before.bonus == after.bonus ? std::string() : fmt::format("Bonus points {}", after.bonus);
@@ -799,7 +850,7 @@ bool BlazonBridge::emitPartyCreationState(const PartyCreationState &state) {
         fields.push_back(makeIntegerField(instance, collection, "party_creation_instance", subjectId,
                                           statKeys[attribute], "Character::GetActualAttribute",
                                           "GUIWindow_PartyCreation::Update",
-                                          localization->attributeName(static_cast<Attribute>(attribute)),
+                                          gameTextToUtf8(localization->attributeName(static_cast<Attribute>(attribute))),
                                           character.stats[attribute]));
     }
     std::string skills;
@@ -1020,7 +1071,7 @@ void BlazonBridge::emitRawDraw(std::string_view text, int x, int y, int w, int h
     if (text.empty())
         return;
     // Screens repaint the same strings every frame, so a text seen within the last half second is not resent.
-    std::string key(text);
+    std::string key = gameTextToUtf8(text);
     auto seen = _rawSeen.find(key);
     if (seen != _rawSeen.end() && _frame - seen->second < 30) {
         seen->second = _frame;

@@ -71,10 +71,12 @@ add_subdirectory(Books)
 add_subdirectory(Houses)
 
 if(OE_BUILD_TESTS)
-    set(TEST_GUI_UI_SOURCES Tests/UIBlazonPartyCreation_ut.cpp)
+    set(TEST_GUI_UI_SOURCES
+            Tests/UIBlazon_ut.cpp
+            Tests/UIBlazonPartyCreation_ut.cpp)
 
     add_library(test_gui_ui OBJECT ${TEST_GUI_UI_SOURCES})
-    target_link_libraries(test_gui_ui PUBLIC testing_unit)
+    target_link_libraries(test_gui_ui PUBLIC testing_unit gui_ui)
 
     target_check_style(test_gui_ui)
 
