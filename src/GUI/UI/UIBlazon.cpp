@@ -133,6 +133,13 @@ std::string makeEnd(const char *lifetimeKind, const std::string &instance) {
     return Json::array({end}).dump();
 }
 
+void appendOperations(Json &out, const std::string &operationsJson) {
+    if (operationsJson.empty())
+        return;
+    for (Json &operation : Json::parse(operationsJson))
+        out.push_back(std::move(operation));
+}
+
 void appendSentence(std::string &out, const std::string &part) {
     if (part.empty())
         return;
@@ -180,6 +187,7 @@ void BlazonBridge::sendHeartbeat() {
     if (_heartbeatSeconds <= 0 || now - _lastHeartbeat < _heartbeatSeconds)
         return;
     _lastHeartbeat = now;
+    flushPendingEnds();
     Json heartbeat = Json{
         {"type", "heartbeat"},
         {"source_run", _sourceRun},
@@ -231,7 +239,7 @@ std::string BlazonBridge::stripFontCodes(std::string_view text) {
 void BlazonBridge::observeStatus(std::string_view text) {
     if (!_enabled)
         return;
-    if (text == _currentText)
+    if (text == _currentText && (_currentInstance != 0 || text.empty()))
         return;
     if (_currentInstance != 0)
         endPointer();
@@ -246,14 +254,17 @@ void BlazonBridge::beginPointer(const std::string &text) {
     std::string operations = makeTextCollection(_sourceRun, instance, "hover_instance", kPointerCollectionKind,
                                                 kSubjectId, "pointer", "Io::Mouse",
                                                 "StatusBar::_statusString", "StatusBar::draw", text, "status");
-    if (sendTransaction(operations))
+    if (sendTransaction(operations)) {
         _currentInstance = number;
+        _currentOperations = std::move(operations);
+    }
 }
 
 void BlazonBridge::endPointer() {
     std::string instance = "mm7/under-pointer/" + std::to_string(_currentInstance);
-    sendTransaction(makeEnd("hover_instance", instance));
+    endLifetime("hover_instance", instance);
     _currentInstance = 0;
+    _currentOperations.clear();
 }
 
 void BlazonBridge::observeEvent(std::string_view text, int stamp) {
@@ -271,14 +282,17 @@ void BlazonBridge::beginEvent(const std::string &text) {
     std::string operations = makeTextCollection(_sourceRun, instance, "event_instance", kEventCollectionKind,
                                                 kGameSubjectId, "game", "Engine",
                                                 "StatusBar::_eventStatusString", "StatusBar::setEvent", text, "event");
-    if (sendTransaction(operations))
+    if (sendTransaction(operations)) {
         _eventInstance = number;
+        _eventOperations = std::move(operations);
+    }
 }
 
 void BlazonBridge::endEvent() {
     std::string instance = "mm7/status-event/" + std::to_string(_eventInstance);
-    sendTransaction(makeEnd("event_instance", instance));
+    endLifetime("event_instance", instance);
     _eventInstance = 0;
+    _eventOperations.clear();
 }
 
 void BlazonBridge::beginMessage() {
@@ -302,11 +316,13 @@ void BlazonBridge::observeMessage(std::string_view body) {
     Json fields = Json::array();
     fields.push_back(makeTextField(instance, collection, "message_instance", kGameSubjectId, "body",
                                    "branchless_dialogue_str", "GUIWindow_BranchlessDialogue::Update", plain));
-    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "message_instance", kMessageCollectionKind,
-                                       kGameSubjectId, "game", "Engine", "game", "GUIWindow_BranchlessDialogue::Update",
-                                       std::move(fields)))) {
+    std::string operations = makeCollection(_sourceRun, instance, collection, "message_instance", kMessageCollectionKind,
+                                            kGameSubjectId, "game", "Engine", "game",
+                                            "GUIWindow_BranchlessDialogue::Update", std::move(fields));
+    if (sendTransaction(operations)) {
         _messageEmitted = true;
         _messageText = plain;
+        _messageOperations = std::move(operations);
     }
 }
 
@@ -314,9 +330,10 @@ void BlazonBridge::endMessage() {
     if (!_enabled || _messageInstance == 0)
         return;
     if (_messageEmitted)
-        sendTransaction(makeEnd("message_instance", "mm7/message/" + std::to_string(_messageInstance)));
+        endLifetime("message_instance", "mm7/message/" + std::to_string(_messageInstance));
     _messageInstance = 0;
     _messageEmitted = false;
+    _messageOperations.clear();
 }
 
 void BlazonBridge::beginHouseFrame(int houseId, std::string_view houseName) {
@@ -332,6 +349,8 @@ void BlazonBridge::beginHouseFrame(int houseId, std::string_view houseName) {
         _houseKey.clear();
         _houseFocusSeen = false;
         _houseFocusText.clear();
+        _houseOperations.clear();
+        _houseFocusOperations.clear();
     }
     _inHouseFrame = true;
     _houseTitles.clear();
@@ -401,11 +420,13 @@ void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     if (!options.empty())
         fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "options",
                                        "house dialogue option labels", "GUIWindow_House::Update", options));
-    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance", kHouseCollectionKind,
-                                       subjectId, "house", "GUIWindow_House::houseId", heading,
-                                       "GUIWindow_House::Update", std::move(fields)))) {
+    std::string operations = makeCollection(_sourceRun, instance, collection, "house_instance", kHouseCollectionKind,
+                                            subjectId, "house", "GUIWindow_House::houseId", heading,
+                                            "GUIWindow_House::Update", std::move(fields));
+    if (sendTransaction(operations)) {
         _houseEmitted = true;
         _houseKey = key;
+        _houseOperations = std::move(operations);
     }
     emitHouseFocus(focusedOption);
 }
@@ -426,22 +447,27 @@ void BlazonBridge::emitHouseFocus(std::string_view focusedOption) {
     Json fields = Json::array();
     fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "option",
                                    "GUIWindow::pCurrentPosActiveItem", "GUIWindow_House::Update", focus));
-    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance",
-                                       kHouseFocusCollectionKind, subjectId, "house",
-                                       "GUIWindow_House::houseId", _houseName.empty() ? "house" : _houseName,
-                                       "GUIWindow_House::Update", std::move(fields))))
+    std::string operations = makeCollection(_sourceRun, instance, collection, "house_instance",
+                                            kHouseFocusCollectionKind, subjectId, "house",
+                                            "GUIWindow_House::houseId", _houseName.empty() ? "house" : _houseName,
+                                            "GUIWindow_House::Update", std::move(fields));
+    if (sendTransaction(operations)) {
         _houseFocusText = focus;
+        _houseFocusOperations = std::move(operations);
+    }
 }
 
 void BlazonBridge::endHouse() {
     if (!_enabled || _houseInstance == 0)
         return;
     if (_houseEmitted)
-        sendTransaction(makeEnd("house_instance", "mm7/house/" + std::to_string(_houseInstance)));
+        endLifetime("house_instance", "mm7/house/" + std::to_string(_houseInstance));
     _houseInstance = 0;
     _houseId = -1;
     _houseEmitted = false;
     _houseKey.clear();
+    _houseOperations.clear();
+    _houseFocusOperations.clear();
 }
 
 void BlazonBridge::beginDialogue(int npcId) {
@@ -486,11 +512,13 @@ void BlazonBridge::observeDialogue(int npcId, std::string_view name, std::string
                                        "GUIWindow_Dialogue::Update dialogue_string", "GUIWindow_Dialogue::Update", plainBody));
         fields.push_back(makeTextField(instance, collection, "dialogue_instance", subjectId, "options",
                                        "GUIButton::label per dialogue option", "GUIWindow_Dialogue::Update", optionText));
-        if (sendTransaction(makeCollection(_sourceRun, instance, collection, "dialogue_instance", kDialogueCollectionKind,
-                                           subjectId, "npc", "speakingNpcId", subjectName, "GUIWindow_Dialogue::Update",
-                                           std::move(fields)))) {
+        std::string operations = makeCollection(_sourceRun, instance, collection, "dialogue_instance",
+                                                kDialogueCollectionKind, subjectId, "npc", "speakingNpcId", subjectName,
+                                                "GUIWindow_Dialogue::Update", std::move(fields));
+        if (sendTransaction(operations)) {
             _dialogueEmitted = true;
             _dialogueKey = key;
+            _dialogueOperations = std::move(operations);
         }
     }
 
@@ -518,9 +546,10 @@ void BlazonBridge::endDialogue() {
     if (!_enabled || _dialogueInstance == 0)
         return;
     if (_dialogueEmitted)
-        sendTransaction(makeEnd("dialogue_instance", "mm7/dialogue/" + std::to_string(_dialogueInstance)));
+        endLifetime("dialogue_instance", "mm7/dialogue/" + std::to_string(_dialogueInstance));
     _dialogueInstance = 0;
     _dialogueEmitted = false;
+    _dialogueOperations.clear();
 }
 
 void BlazonBridge::observePopupHold(bool holding) {
@@ -620,17 +649,21 @@ void BlazonBridge::emitPopup(const std::string &text) {
     if (sendTransaction(operations)) {
         _popupEmitted = true;
         _popupText = text;
+        _popupOperations = std::move(operations);
     }
 }
 
 void BlazonBridge::endPopup() {
     std::string instance = "mm7/popup/" + std::to_string(_popupInstance);
-    sendTransaction(makeEnd("popup_instance", instance));
+    endLifetime("popup_instance", instance);
     _popupEmitted = false;
+    _popupOperations.clear();
 }
 
 void BlazonBridge::sendInput(const char *action) {
     if (!_enabled)
+        return;
+    if (!sendResync())
         return;
     uint64_t sequence = _inputSequence + 1;
     Json input = Json{
@@ -643,7 +676,13 @@ void BlazonBridge::sendInput(const char *action) {
         _inputSequence = sequence;
 }
 
-bool BlazonBridge::sendTransaction(const std::string &operationsJson) {
+bool BlazonBridge::sendTransaction(const std::string &operationsJson, bool resync) {
+    if (!flushPendingEnds())
+        return false;
+    return sendTransactionDatagram(operationsJson, resync);
+}
+
+bool BlazonBridge::sendTransactionDatagram(const std::string &operationsJson, bool resync) {
     // The sequence is reserved only when the datagram leaves, so a dropped send never opens a gap in the run.
     uint64_t sequence = _transactionSequence + 1;
     Json transaction = Json{
@@ -654,10 +693,40 @@ bool BlazonBridge::sendTransaction(const std::string &operationsJson) {
         {"transaction_id", _sourceRun + ":transaction:" + std::to_string(sequence)},
         {"operations", Json::parse(operationsJson)},
     };
+    if (resync)
+        transaction["resync"] = true;
     if (!sendDatagram(transaction.dump(-1, ' ', false, Json::error_handler_t::replace)))
         return false;
     _transactionSequence = sequence;
     return true;
+}
+
+bool BlazonBridge::sendResync() {
+    Json operations = Json::array();
+    appendOperations(operations, _currentOperations);
+    appendOperations(operations, _popupOperations);
+    appendOperations(operations, _eventOperations);
+    appendOperations(operations, _messageOperations);
+    appendOperations(operations, _dialogueOperations);
+    appendOperations(operations, _houseOperations);
+    appendOperations(operations, _houseFocusOperations);
+    if (operations.empty())
+        return true;
+    return sendTransaction(operations.dump(-1, ' ', false, Json::error_handler_t::replace), true);
+}
+
+bool BlazonBridge::flushPendingEnds() {
+    while (!_pendingEnds.empty()) {
+        if (!sendTransactionDatagram(_pendingEnds.front(), false))
+            return false;
+        _pendingEnds.erase(_pendingEnds.begin());
+    }
+    return true;
+}
+
+void BlazonBridge::endLifetime(const char *lifetimeKind, const std::string &instance) {
+    _pendingEnds.push_back(makeEnd(lifetimeKind, instance));
+    flushPendingEnds();
 }
 
 bool BlazonBridge::sendDatagram(const std::string &payload) {

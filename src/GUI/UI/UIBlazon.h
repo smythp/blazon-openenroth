@@ -125,7 +125,11 @@ class BlazonBridge {
     BlazonBridge &operator=(const BlazonBridge &) = delete;
 
     bool sendDatagram(const std::string &payload);
-    bool sendTransaction(const std::string &operationsJson);
+    bool sendTransaction(const std::string &operationsJson, bool resync = false);
+    bool sendTransactionDatagram(const std::string &operationsJson, bool resync);
+    bool sendResync();
+    bool flushPendingEnds();
+    void endLifetime(const char *lifetimeKind, const std::string &instance);
     void beginPointer(const std::string &text);
     void endPointer();
     void emitHouseFocus(std::string_view focusedOption);
@@ -143,19 +147,23 @@ class BlazonBridge {
     uint64_t _transactionSequence = 0;
     uint64_t _inputSequence = 0;
     uint64_t _instanceSequence = 0;
+    std::vector<std::string> _pendingEnds;
 
     uint64_t _currentInstance = 0;
     std::string _currentText;
+    std::string _currentOperations;
 
     bool _popupHolding = false;
     bool _inPopupFrame = false;
     uint64_t _popupInstance = 0;
     bool _popupEmitted = false;
     std::string _popupText;
+    std::string _popupOperations;
     std::vector<std::string> _popupTitles;
     std::vector<std::string> _popupBody;
 
     uint64_t _eventInstance = 0;
+    std::string _eventOperations;
 
     uint64_t _houseInstance = 0;
     int _houseId = -1;
@@ -165,18 +173,22 @@ class BlazonBridge {
     std::string _houseKey;
     bool _houseFocusSeen = false;
     std::string _houseFocusText;
+    std::string _houseOperations;
+    std::string _houseFocusOperations;
     std::vector<std::string> _houseTitles;
     std::vector<std::string> _houseBody;
 
     uint64_t _messageInstance = 0;
     bool _messageEmitted = false;
     std::string _messageText;
+    std::string _messageOperations;
 
     uint64_t _dialogueInstance = 0;
     bool _dialogueEmitted = false;
     std::string _dialogueKey;
     bool _dialogueFocusSeen = false;
     std::string _dialogueFocusText;
+    std::string _dialogueOperations;
 
     void sendHeartbeat();
 
