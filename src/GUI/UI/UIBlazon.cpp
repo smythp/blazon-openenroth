@@ -1,5 +1,6 @@
 #include "UIBlazon.h"
 #include "UIBlazonPartyCreation.h"
+#include "UIBlazonPortraits.h"
 
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -52,6 +53,8 @@ constexpr const char *kPartyCreationStateCollectionKind = "mm7.party_creation.ch
 constexpr const char *kPartyCreationEntryCollectionKind = "mm7.party_creation.entry.state";
 constexpr const char *kPartyCreationFocusCollectionKind = "mm7.party_creation.focus.state";
 constexpr const char *kPartyCreationChangeCollectionKind = "mm7.party_creation.change.state";
+constexpr const char *kPortraitVitalsCollectionKind = "mm7.portrait_vitals.state";
+constexpr const char *kPortraitSelectionVitalsCollectionKind = "mm7.portrait_selection_vitals.state";
 constexpr const char *kSubjectId = "mm7/pointer";
 constexpr const char *kGameSubjectId = "mm7/game";
 constexpr const char *kPartyCreationSubjectId = "mm7/party-creation";
@@ -330,7 +333,7 @@ std::string BlazonBridge::stripFontCodes(std::string_view text) {
 void BlazonBridge::observeStatus(std::string_view text) {
     if (!_enabled)
         return;
-    std::string utf8 = gameTextToUtf8(text);
+    std::string utf8 = _portraitHoverSlot >= 0 ? std::string() : gameTextToUtf8(text);
     if (utf8 == _currentText && (_currentInstance != 0 || utf8.empty()))
         return;
     if (_currentInstance != 0)
@@ -1023,6 +1026,115 @@ void BlazonBridge::endPartyCreation() {
     _partyCreationChangeOperations.clear();
 }
 
+bool BlazonBridge::emitPortraitVitals(int characterSlot, const std::string &instance,
+                                      const char *lifetimeKind, const char *collectionKind,
+                                      const char *hook, std::string *operations) {
+    Character &character = pParty->pCharacters[characterSlot];
+    Condition condition = character.GetMajorConditionIdx();
+    std::string conditionName = gameTextToUtf8(localization->characterConditionName(condition));
+    BlazonPortraits::ConditionText conditionText = BlazonPortraits::conditionText(condition, conditionName);
+    std::string characterName = gameTextToUtf8(character.name);
+    std::string lineStart = conditionText.prefix + characterName;
+    std::string lineEnd = std::to_string(character.GetMaxMana()) + conditionText.suffix;
+    std::string collection = instance + "/vitals";
+    std::string subjectId = "mm7/party/character/slot/" + std::to_string(characterSlot + 1);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, lifetimeKind, subjectId, "line_start",
+                                   "Character::name and optional leading major condition", hook, lineStart));
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId.c_str(), "health",
+                               "Character::GetHealth", hook,
+                               Json{{"type", "integer"}, {"integer", character.GetHealth()},
+                                    {"display", std::to_string(character.GetHealth())}}));
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId.c_str(), "health_max",
+                               "Character::GetMaxHealth", hook,
+                               Json{{"type", "integer"}, {"integer", character.GetMaxHealth()},
+                                    {"display", std::to_string(character.GetMaxHealth())}}));
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId.c_str(), "mana",
+                               "Character::GetMana", hook,
+                               Json{{"type", "integer"}, {"integer", character.GetMana()},
+                                    {"display", std::to_string(character.GetMana())}}));
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId.c_str(), "mana_max",
+                               "Character::GetMaxMana", hook,
+                               Json{{"type", "integer"}, {"integer", character.GetMaxMana()},
+                                    {"display", std::to_string(character.GetMaxMana())}}));
+    fields.push_back(makeField(instance, collection, lifetimeKind, subjectId.c_str(), "condition",
+                               "Character::GetMajorConditionIdx and Localization::characterConditionName", hook,
+                               Json{{"type", "enum"}, {"code", std::to_string(std::to_underlying(condition))},
+                                    {"display", conditionName}}));
+    fields.push_back(makeTextField(instance, collection, lifetimeKind, subjectId, "line_end",
+                                   "Character::GetMaxMana and optional trailing major condition", hook, lineEnd));
+    std::string next = makeCollection(_sourceRun, instance, collection, lifetimeKind, collectionKind,
+                                      subjectId, "character", "Party::pCharacters",
+                                      characterName, hook, std::move(fields));
+    if (!sendTransaction(next))
+        return false;
+    *operations = std::move(next);
+    return true;
+}
+
+void BlazonBridge::observePortraitHover(const GUIWindow &window, bool visible) {
+    if (!_enabled)
+        return;
+    int characterSlot = -1;
+    if (visible) {
+        Pointi pointer = EngineIocContainer::ResolveMouse()->position();
+        for (GUIButton *button : window.vButtons) {
+            if (button->uButtonType == BUTTON_TYPE_CHARACTER && button->msg == UIMSG_SelectCharacter &&
+                button->Contains(pointer)) {
+                characterSlot = static_cast<int>(button->msg_param) - 1;
+                break;
+            }
+        }
+    }
+    if (characterSlot == _portraitHoverSlot) {
+        if (_portraitHoverInstance != 0 && _portraitHoverOperations.empty()) {
+            emitPortraitVitals(characterSlot, "mm7/portrait-hover/" + std::to_string(_portraitHoverInstance),
+                               "portrait_hover_instance", kPortraitVitalsCollectionKind,
+                               "Engine::DrawGUI", &_portraitHoverOperations);
+        }
+        return;
+    }
+    endPortraitHover();
+    _portraitHoverSlot = characterSlot;
+    if (characterSlot < 0)
+        return;
+    _portraitHoverInstance = ++_instanceSequence;
+    emitPortraitVitals(characterSlot, "mm7/portrait-hover/" + std::to_string(_portraitHoverInstance),
+                       "portrait_hover_instance", kPortraitVitalsCollectionKind,
+                       "Engine::DrawGUI", &_portraitHoverOperations);
+}
+
+void BlazonBridge::endPortraitHover() {
+    if (_portraitHoverInstance != 0) {
+        endLifetime("portrait_hover_instance",
+                    "mm7/portrait-hover/" + std::to_string(_portraitHoverInstance));
+    }
+    _portraitHoverInstance = 0;
+    _portraitHoverSlot = -1;
+    _portraitHoverOperations.clear();
+}
+
+void BlazonBridge::observePortraitSelection(int characterSlot) {
+    if (!_enabled)
+        return;
+    assert(characterSlot >= 0 && characterSlot < pParty->pCharacters.size());
+    endPortraitSelection();
+    _portraitSelectionInstance = ++_instanceSequence;
+    emitPortraitVitals(characterSlot,
+                       "mm7/portrait-selection/" + std::to_string(_portraitSelectionInstance),
+                       "portrait_selection_instance", kPortraitSelectionVitalsCollectionKind,
+                       "GameUI_OnPlayerPortraitLeftClick", &_portraitSelectionOperations);
+}
+
+void BlazonBridge::endPortraitSelection() {
+    if (_portraitSelectionInstance != 0) {
+        endLifetime("portrait_selection_instance",
+                    "mm7/portrait-selection/" + std::to_string(_portraitSelectionInstance));
+    }
+    _portraitSelectionInstance = 0;
+    _portraitSelectionOperations.clear();
+}
+
 void BlazonBridge::observePopupHold(bool holding) {
     if (!_enabled)
         return;
@@ -1191,6 +1303,8 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _partyCreationEntryOperations);
     appendOperations(operations, _partyCreationFocusOperations);
     appendOperations(operations, _partyCreationChangeOperations);
+    appendOperations(operations, _portraitHoverOperations);
+    appendOperations(operations, _portraitSelectionOperations);
     if (operations.empty())
         return true;
     return sendTransactionDatagram(operations.dump(-1, ' ', false, Json::error_handler_t::replace), true);

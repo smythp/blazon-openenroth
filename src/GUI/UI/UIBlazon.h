@@ -18,10 +18,9 @@ class GUIWindow;
  * semantic pieces (schema blazon.semantic-pieces/draft-1) exactly as the
  * ScummVM Xeen bridge does. It never speaks and never reads game input.
  *
- * Scopes so far: the text under the pointer, observed once per frame at the
- * status bar, and the right-click popup, captured from the strings the popup
- * draws while the button is held. Both are string chokepoints. Identity from
- * the hover resolver and the popup composers comes next.
+ * Most scopes capture strings from the status bar and popup composers.
+ * Party creation and portrait vitals instead emit typed identity and values
+ * directly from game state and localization tables.
  */
 class BlazonBridge {
  public:
@@ -117,6 +116,23 @@ class BlazonBridge {
     void endPartyCreation();
 
     /**
+     * Observes the party portrait under the pointer once per HUD frame. A
+     * portrait entry begins one vitals instance. Leaving or entering another
+     * portrait ends it. Character changes within an instance stay silent.
+     *
+     * @param window                    Window holding the portrait buttons.
+     * @param visible                   Whether the portrait HUD is visible.
+     */
+    void observePortraitHover(const GUIWindow &window, bool visible);
+
+    /**
+     * Announces a character selected through a portrait button or its key.
+     *
+     * @param characterSlot             Zero-based character slot.
+     */
+    void observePortraitSelection(int characterSlot);
+
+    /**
      * Explicit Blazon command from a key press.
      *
      * @param action                    "capture", "stop", "read_collection" or "mark".
@@ -185,6 +201,11 @@ class BlazonBridge {
     bool emitPartyCreationEntry(const PartyCreationState &state);
     bool emitPartyCreationFocus(const PartyCreationFocus &focus);
     bool emitPartyCreationChange(const std::string &text);
+    bool emitPortraitVitals(int characterSlot, const std::string &instance,
+                            const char *lifetimeKind, const char *collectionKind,
+                            const char *hook, std::string *operations);
+    void endPortraitHover();
+    void endPortraitSelection();
 
     std::string _socketPath;
     std::string _sourceRun;
@@ -250,6 +271,13 @@ class BlazonBridge {
     std::string _partyCreationEntryOperations;
     std::string _partyCreationFocusOperations;
     std::string _partyCreationChangeOperations;
+
+    uint64_t _portraitHoverInstance = 0;
+    int _portraitHoverSlot = -1;
+    std::string _portraitHoverOperations;
+
+    uint64_t _portraitSelectionInstance = 0;
+    std::string _portraitSelectionOperations;
 
     void sendHeartbeat();
 

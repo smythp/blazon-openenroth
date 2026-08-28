@@ -45,6 +45,7 @@
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/Books/LloydsBook.h"
 #include "GUI/UI/Books/TownPortalBook.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UICharacter.h"
 #include "GUI/UI/UIHouses.h"
 #include "GUI/UI/UIStatusBar.h"
@@ -564,6 +565,12 @@ void GUIWindow_GameOptions::Update() {
 }
 
 void GameUI_OnPlayerPortraitLeftClick(int uPlayerID) {
+    auto selectCharacter = [uPlayerID] {
+        bool changed = !pParty->hasActiveCharacter() || pParty->activeCharacterIndex() != uPlayerID;
+        pParty->setActiveCharacterIndex(uPlayerID);
+        if (changed)
+            BlazonBridge::instance().observePortraitSelection(uPlayerID - 1);
+    };
     Character *player = &pParty->pCharacters[uPlayerID - 1];
     if (pParty->pPickedItem.itemId != ITEM_NULL) {
         if (std::optional<Pointi> pos = player->inventory.findSpace(pParty->pPickedItem)) {
@@ -586,7 +593,7 @@ void GameUI_OnPlayerPortraitLeftClick(int uPlayerID) {
                     return;
                 }
 
-                pParty->setActiveCharacterIndex(uPlayerID);
+                selectCharacter();
                 return;
             }
             pGUIWindow_CurrentMenu = std::make_unique<GUIWindow_CharacterRecord>(pParty->activeCharacterIndex(), SCREEN_CHARACTERS);
@@ -608,28 +615,28 @@ void GameUI_OnPlayerPortraitLeftClick(int uPlayerID) {
         if (player->timeToRecovery) {
             return;
         }
-        pParty->setActiveCharacterIndex(uPlayerID);
+        selectCharacter();
         return;
     }
     if (current_screen_type != SCREEN_HOUSE) {
         if (current_screen_type == SCREEN_SHOP_INVENTORY || current_screen_type == SCREEN_CHEST_INVENTORY) {
-            pParty->setActiveCharacterIndex(uPlayerID);
+            selectCharacter();
             return;
         }
         if (current_screen_type != SCREEN_CHEST_INVENTORY) {
-            pParty->setActiveCharacterIndex(uPlayerID);
+            selectCharacter();
             return;
         }
         if (pParty->activeCharacterIndex() == uPlayerID) {
             current_character_screen_window = WINDOW_CharacterWindow_Inventory;
             current_screen_type = SCREEN_CHEST_INVENTORY;
-            pParty->setActiveCharacterIndex(uPlayerID);
+            selectCharacter();
             return;
         }
         if (player->timeToRecovery) {
             return;
         }
-        pParty->setActiveCharacterIndex(uPlayerID);
+        selectCharacter();
         return;
     }
     if (window_SpeakInHouse->keyboard_input_status == WINDOW_INPUT_IN_PROGRESS) {
@@ -637,7 +644,7 @@ void GameUI_OnPlayerPortraitLeftClick(int uPlayerID) {
     }
 
     if (pParty->activeCharacterIndex() != uPlayerID) {
-        pParty->setActiveCharacterIndex(uPlayerID);
+        selectCharacter();
         return;
     }
 

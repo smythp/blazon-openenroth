@@ -73,9 +73,10 @@
 
 #include "GUI/GUIProgressBar.h"
 #include "GUI/GUIWindow.h"
-#include "GUI/UI/UIStatusBar.h"
-#include "GUI/UI/UIPopup.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIMessageScroll.h"
+#include "GUI/UI/UIPopup.h"
+#include "GUI/UI/UIStatusBar.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/Overlay/OverlaySystem.h"
 
@@ -199,6 +200,9 @@ void Engine::DrawGUI() {
     render->ResetUIClipRect();
 
     bool fullscreenView = config->graphics.FullscreenView.value();
+
+    if (pPrimaryWindow)
+        BlazonBridge::instance().observePortraitHover(*pPrimaryWindow, !fullscreenView);
 
     if (!fullscreenView)
         GameUI_DrawRightPanelFrames();
