@@ -1067,7 +1067,12 @@ void GUIWindow_House::Update() {
     }
     BlazonBridge::instance().beginHouseFrame(static_cast<int>(houseId()), houseTable[houseId()].name);
     houseDialogManager();
-    BlazonBridge::instance().endHouseFrame();
+    std::string blazonFocus;
+    if (pDialogueWindow) {
+        if (GUIButton *focused = pDialogueWindow->GetControl(pDialogueWindow->pCurrentPosActiveItem))
+            blazonFocus = focused->label;
+    }
+    BlazonBridge::instance().endHouseFrame(blazonFocus);
     if (!isShop(houseId())) {
         return;
     }

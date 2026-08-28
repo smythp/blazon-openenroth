@@ -95,7 +95,7 @@ class BlazonBridge {
      * @param houseName                 Building name from the game's house table, may be empty.
      */
     void beginHouseFrame(int houseId, std::string_view houseName);
-    void endHouseFrame();
+    void endHouseFrame(std::string_view focusedOption);
     void endHouse();
 
     void beginDialogue(int npcId);
@@ -128,6 +128,7 @@ class BlazonBridge {
     bool sendTransaction(const std::string &operationsJson);
     void beginPointer(const std::string &text);
     void endPointer();
+    void emitHouseFocus(std::string_view focusedOption);
     void emitPopup(const std::string &text);
     void endPopup();
     void emitRawDraw(std::string_view text, int x, int y, int w, int h);
@@ -163,6 +164,8 @@ class BlazonBridge {
     bool _inHouseFrame = false;
     bool _houseEmitted = false;
     std::string _houseKey;
+    bool _houseFocusSeen = false;
+    std::string _houseFocusText;
     std::vector<std::string> _houseTitles;
     std::vector<std::string> _houseBody;
 

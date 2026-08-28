@@ -28,6 +28,7 @@ constexpr const char *kPointerCollectionKind = "mm7.under_pointer.state";
 constexpr const char *kPopupCollectionKind = "mm7.popup.state";
 constexpr const char *kEventCollectionKind = "mm7.status_event.state";
 constexpr const char *kHouseCollectionKind = "mm7.house.state";
+constexpr const char *kHouseFocusCollectionKind = "mm7.house_focus.state";
 constexpr const char *kMessageCollectionKind = "mm7.message.state";
 constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
 constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
@@ -332,13 +333,15 @@ void BlazonBridge::beginHouseFrame(int houseId, std::string_view houseName) {
         _houseId = houseId;
         _houseEmitted = false;
         _houseKey.clear();
+        _houseFocusSeen = false;
+        _houseFocusText.clear();
     }
     _inHouseFrame = true;
     _houseTitles.clear();
     _houseBody.clear();
 }
 
-void BlazonBridge::endHouseFrame() {
+void BlazonBridge::endHouseFrame(std::string_view focusedOption) {
     if (!_inHouseFrame)
         return;
     _inHouseFrame = false;
@@ -374,15 +377,25 @@ void BlazonBridge::endHouseFrame() {
     if (options.empty())
         options = "none";
 
+    // The heading rides along only on the first read of a house. Stepping into a
+    // submenu should say what the submenu says, not the proprietor's name again.
+    std::string spoken = body;
+    if (!_houseEmitted) {
+        spoken = heading;
+        appendSentence(spoken, body);
+    }
+
     std::string key = heading + "\x1f" + body + "\x1f" + options;
-    if (key == _houseKey)
+    if (key == _houseKey) {
+        emitHouseFocus(focusedOption);
         return;
+    }
     std::string instance = "mm7/house/" + std::to_string(_houseInstance);
     std::string collection = instance + "/state";
     std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
     Json fields = Json::array();
     fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "body",
-                                   "house greeting or response", "GUIWindow_House::Update", body));
+                                   "house greeting or response", "GUIWindow_House::Update", spoken));
     fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "options",
                                    "house dialogue option labels", "GUIWindow_House::Update", options));
     if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance", kHouseCollectionKind,
@@ -391,6 +404,30 @@ void BlazonBridge::endHouseFrame() {
         _houseEmitted = true;
         _houseKey = key;
     }
+    emitHouseFocus(focusedOption);
+}
+
+void BlazonBridge::emitHouseFocus(std::string_view focusedOption) {
+    std::string focus = stripFontCodes(focusedOption);
+    // The first observation is the screen's opening state, not a move onto an option.
+    if (!_houseFocusSeen) {
+        _houseFocusSeen = true;
+        _houseFocusText = focus;
+        return;
+    }
+    if (focus.empty() || focus == _houseFocusText)
+        return;
+    std::string instance = "mm7/house/" + std::to_string(_houseInstance);
+    std::string collection = instance + "/focus";
+    std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "option",
+                                   "GUIWindow::pCurrentPosActiveItem", "GUIWindow_House::Update", focus));
+    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance",
+                                       kHouseFocusCollectionKind, subjectId, "house",
+                                       "GUIWindow_House::houseId", _houseName.empty() ? "house" : _houseName,
+                                       "GUIWindow_House::Update", std::move(fields))))
+        _houseFocusText = focus;
 }
 
 void BlazonBridge::endHouse() {
