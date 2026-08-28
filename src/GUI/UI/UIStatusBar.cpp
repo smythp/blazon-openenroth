@@ -25,8 +25,6 @@ const std::string &StatusBar::get() {
 void StatusBar::draw() {
     // Blazon observes the hover text once per frame here, in both game loops.
     BlazonBridge::instance().observeStatus(_statusString);
-    BlazonBridge::instance().observeEvent(_eventStatusExpireTime ? std::string_view(_eventStatusString) : std::string_view(),
-                                          _eventStatusExpireTime);
 
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 
@@ -44,7 +42,7 @@ void StatusBar::drawForced(std::string_view str, Color color) {
 void StatusBar::update() {
     // Was also checking that event timer is not stopped
     if (_eventStatusExpireTime && platform->tickCount() >= _eventStatusExpireTime) {
-        _eventStatusExpireTime = 0;
+        clearEvent();
     }
 }
 
@@ -68,15 +66,18 @@ void StatusBar::clearAll() {
 void StatusBar::setEvent(std::string_view str) {
     _eventStatusString = str;
     _eventStatusExpireTime = platform->tickCount() + EVENT_DURATION;
+    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime);
 }
 
 void StatusBar::setEventShort(std::string_view str) {
     _eventStatusString = str;
     _eventStatusExpireTime = platform->tickCount() + EVENT_DURATION_SHORT;
+    BlazonBridge::instance().observeEvent(_eventStatusString, _eventStatusExpireTime);
 }
 
 void StatusBar::clearEvent() {
     _eventStatusExpireTime = 0;
+    BlazonBridge::instance().observeEvent({}, 0);
 }
 
 void StatusBar::nothingHere() {

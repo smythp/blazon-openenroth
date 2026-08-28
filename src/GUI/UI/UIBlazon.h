@@ -36,9 +36,9 @@ class BlazonBridge {
     void observeStatus(std::string_view text);
 
     /**
-     * Per-frame observation of the status bar's timed event message, the
-     * channel behind "Game Saved!", "Nothing here" and similar feedback. Each
-     * new message is a new event instance even when its text repeats.
+     * Observes changes to the status bar's timed event message, the channel
+     * behind "Game Saved!", "Nothing here" and similar feedback. Each setter
+     * call is a new event instance even when its text repeats.
      *
      * @param text                      Event text, empty when no event is showing.
      * @param stamp                     The event's expiry tick, zero when none is showing.
@@ -155,7 +155,6 @@ class BlazonBridge {
     std::vector<std::string> _popupTitles;
     std::vector<std::string> _popupBody;
 
-    int _eventStamp = 0;
     uint64_t _eventInstance = 0;
 
     uint64_t _houseInstance = 0;

@@ -259,9 +259,6 @@ void BlazonBridge::endPointer() {
 void BlazonBridge::observeEvent(std::string_view text, int stamp) {
     if (!_enabled)
         return;
-    if (stamp == _eventStamp)
-        return;
-    _eventStamp = stamp;
     if (_eventInstance != 0)
         endEvent();
     if (stamp != 0 && !text.empty())
@@ -273,7 +270,7 @@ void BlazonBridge::beginEvent(const std::string &text) {
     std::string instance = "mm7/status-event/" + std::to_string(number);
     std::string operations = makeTextCollection(_sourceRun, instance, "event_instance", kEventCollectionKind,
                                                 kGameSubjectId, "game", "Engine",
-                                                "StatusBar::_eventStatusString", "StatusBar::draw", text, "event");
+                                                "StatusBar::_eventStatusString", "StatusBar::setEvent", text, "event");
     if (sendTransaction(operations))
         _eventInstance = number;
 }
