@@ -10,6 +10,24 @@
 
 class GUIWindow;
 
+enum class BlazonWareAction {
+    BLAZON_WARE_ACTION_BUY,
+    BLAZON_WARE_ACTION_SELL,
+    BLAZON_WARE_ACTION_IDENTIFY,
+    BLAZON_WARE_ACTION_REPAIR,
+    BLAZON_WARE_ACTION_ALREADY_IDENTIFIED,
+    BLAZON_WARE_ACTION_NO_REPAIR_NEEDED,
+    BLAZON_WARE_ACTION_UNAVAILABLE,
+};
+
+struct BlazonWare {
+    std::string name;
+    int price = 0;
+    BlazonWareAction action = BlazonWareAction::BLAZON_WARE_ACTION_BUY;
+    std::string spellName;
+    std::string schoolName;
+};
+
 /**
  * Blazon bridge for OpenEnroth.
  *
@@ -101,6 +119,31 @@ class BlazonBridge {
     void endHouseFrame(std::string_view focusedOption);
     void endHouse();
 
+    /**
+     * Ordered wares visible in the current house submenu. The caller supplies
+     * item identity and prices from the game tables and PriceCalculator.
+     *
+     * @param wares                     Wares in visual reading order.
+     * @param hook                      House composer that supplied the wares.
+     */
+    void observeHouseWares(const std::vector<BlazonWare> &wares, const char *hook);
+
+    /**
+     * Ware resolved by the house UI's item rectangle hit test this frame.
+     *
+     * @param ware                      Focused ware and its current offer.
+     * @param hook                      Item rectangle hit test that resolved it.
+     */
+    void observeHouseWare(const BlazonWare &ware, const char *hook);
+
+    /**
+     * Formats one normalized ware for speech.
+     *
+     * @param ware                      Ware identity and current offer.
+     * @return                          Terse spoken line in UTF-8.
+     */
+    static std::string houseWareLine(const BlazonWare &ware);
+
     void beginDialogue(int npcId);
     void observeDialogue(int npcId, std::string_view name, std::string_view body,
                          const std::vector<std::string> &options, int highlighted);
@@ -162,6 +205,9 @@ class BlazonBridge {
     void beginPointer(const std::string &text);
     void endPointer();
     void emitHouseFocus(std::string_view focusedOption);
+    void finishHouseWaresFrame();
+    void endHouseWares();
+    void endHouseWareFocus();
     void emitPopup(const std::string &text);
     void endPopup();
     void emitRawDraw(std::string_view text, int x, int y, int w, int h);
@@ -245,6 +291,19 @@ class BlazonBridge {
     std::string _houseFocusOperations;
     std::vector<std::string> _houseTitles;
     std::vector<std::string> _houseBody;
+
+    uint64_t _houseWaresInstance = 0;
+    uint64_t _houseWareFocusInstance = 0;
+    bool _houseWaresSeenInFrame = false;
+    bool _houseWareSeenInFrame = false;
+    std::vector<BlazonWare> _houseFrameWares;
+    BlazonWare _houseFrameWare;
+    std::string _houseWaresHook;
+    std::string _houseWareFocusHook;
+    std::string _houseWaresKey;
+    std::string _houseWareFocusKey;
+    std::string _houseWaresOperations;
+    std::string _houseWareFocusOperations;
 
     uint64_t _messageInstance = 0;
     bool _messageEmitted = false;

@@ -10,6 +10,8 @@
 #include "Engine/Graphics/Image.h"
 #include "Engine/Localization.h"
 #include "Engine/Objects/Item.h"
+#include "Engine/Spells/SpellEnumFunctions.h"
+#include "Engine/Spells/Spells.h"
 #include "Engine/Tables/ItemTable.h"
 #include "Engine/Tables/MerchantTable.h"
 #include "Engine/Party.h"
@@ -21,6 +23,7 @@
 #include "GUI/GUIButton.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/UI/UIStatusBar.h"
+#include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/Houses/Shops.h"
 
 #include "Media/Audio/AudioPlayer.h"
@@ -100,6 +103,27 @@ static constexpr IndexedArray<Mastery, HOUSE_FIRST_MAGIC_GUILD, HOUSE_LAST_MAGIC
     {HOUSE_DARK_GUILD_PIT,              MASTERY_GRANDMASTER}
 };
 
+static BlazonWare blazonGuildWare(Item &item, HouseId houseId) {
+    SpellId spell = spellForSpellbook(item.itemId);
+    BlazonWare result;
+    result.name = item.GetDisplayName();
+    result.price = PriceCalculator::itemBuyingPriceForPlayer(
+        &pParty->activeCharacter(), item.GetValue(), houseTable[houseId].fPriceMultiplier);
+    result.spellName = pSpellStats->pInfos[spell].name;
+    result.schoolName = localization->spellSchoolName(magicSchoolForSpell(spell));
+    return result;
+}
+
+static std::vector<BlazonWare> blazonGuildShelf(HouseId houseId, int count) {
+    std::vector<BlazonWare> result;
+    for (int i = 0; i < count; ++i) {
+        Item &item = pParty->spellBooksInGuilds[houseId][i];
+        if (item.itemId != ITEM_NULL)
+            result.push_back(blazonGuildWare(item, houseId));
+    }
+    return result;
+}
+
 void GUIWindow_MagicGuild::mainDialogue() {
     Recti working_window = this->frameRect;
     working_window.x = SIDE_TEXT_BOX_POS_X;
@@ -167,6 +191,9 @@ void GUIWindow_MagicGuild::buyBooksDialogue() {
     }
 
     if (checkIfPlayerCanInteract()) {
+        BlazonBridge::instance().observeHouseWares(
+            blazonGuildShelf(houseId(), itemAmountInShop[buildingType()]),
+            "GUIWindow_MagicGuild::buyBooksDialogue");
         int itemcount = 0;
         for (int i = 0; i < itemAmountInShop[buildingType()]; ++i) {
             if (pParty->spellBooksInGuilds[houseId()][i].itemId != ITEM_NULL)
@@ -200,6 +227,9 @@ void GUIWindow_MagicGuild::buyBooksDialogue() {
 
                 if (pt.x >= testpos && pt.x <= testpos + (shop_ui_items_in_store[testx]->width())) {
                     if ((pt.y >= 90 && pt.y <= (90 + (shop_ui_items_in_store[testx]->height()))) || (pt.y >= 250 && pt.y <= (250 + (shop_ui_items_in_store[testx]->height())))) {
+                        BlazonBridge::instance().observeHouseWare(
+                            blazonGuildWare(*item, houseId()),
+                            "GUIWindow_MagicGuild::buyBooksDialogue");
                         MerchantPhrase phrase = pParty->activeCharacter().SelectPhrasesTransaction(item, HOUSE_TYPE_MAGIC_SHOP, houseId(), SHOP_SCREEN_BUY);
                         std::string str = BuildDialogueString(pMerchantsBuyPhrases[phrase], pParty->activeCharacterIndex() - 1, houseNpcs[currentHouseNpc].npc, item, houseId(), SHOP_SCREEN_BUY);
                         int textHeight = assets->pFontArrus->CalcTextHeight(str, working_window.w, 0);
