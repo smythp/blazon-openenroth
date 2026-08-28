@@ -1,3 +1,4 @@
+#include "GUI/UI/UIBlazon.h"
 #include "UIHouses.h"
 
 #include <cstdlib>
@@ -1064,7 +1065,9 @@ void GUIWindow_House::Update() {
     if (!window_SpeakInHouse) {
         return;
     }
+    BlazonBridge::instance().beginHouseFrame(static_cast<int>(houseId()));
     houseDialogManager();
+    BlazonBridge::instance().endHouseFrame();
     if (!isShop(houseId())) {
         return;
     }
@@ -1076,6 +1079,7 @@ void GUIWindow_House::Update() {
 }
 
 GUIWindow_House::~GUIWindow_House() {
+    BlazonBridge::instance().endHouse();
     keyboardInputHandler->EndTextInput(this); // Banks and town halls ask for a gold amount.
 
     for (HouseNpcDesc &desc : houseNpcs) {

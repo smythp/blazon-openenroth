@@ -27,6 +27,7 @@ constexpr const char *kBuild = "8673e3e7+blazon-pointer";
 constexpr const char *kPointerCollectionKind = "mm7.under_pointer.state";
 constexpr const char *kPopupCollectionKind = "mm7.popup.state";
 constexpr const char *kEventCollectionKind = "mm7.status_event.state";
+constexpr const char *kHouseCollectionKind = "mm7.house.state";
 constexpr const char *kMessageCollectionKind = "mm7.message.state";
 constexpr const char *kDialogueCollectionKind = "mm7.dialogue.state";
 constexpr const char *kDialogueFocusCollectionKind = "mm7.dialogue_focus.state";
@@ -320,6 +321,74 @@ void BlazonBridge::endMessage() {
     _messageEmitted = false;
 }
 
+void BlazonBridge::beginHouseFrame(int houseId) {
+    if (!_enabled)
+        return;
+    if (_houseInstance == 0 || houseId != _houseId) {
+        if (_houseInstance != 0)
+            endHouse();
+        _houseInstance = ++_instanceSequence;
+        _houseId = houseId;
+        _houseEmitted = false;
+        _houseKey.clear();
+    }
+    _inHouseFrame = true;
+    _houseTitles.clear();
+    _houseBody.clear();
+}
+
+void BlazonBridge::endHouseFrame() {
+    if (!_inHouseFrame)
+        return;
+    _inHouseFrame = false;
+    if (_houseTitles.empty())
+        return;
+    // drawNpcHouseNameAndTitle runs first, so the first title is the heading and the rest are options.
+    std::string heading = _houseTitles.front();
+    std::string options;
+    for (size_t i = 1; i < _houseTitles.size(); ++i) {
+        if (!options.empty())
+            options += ", ";
+        options += _houseTitles[i];
+    }
+    std::string body;
+    for (const std::string &part : _houseBody)
+        appendSentence(body, part);
+    if (body.empty())
+        body = "No message";
+    if (options.empty())
+        options = "none";
+
+    std::string key = heading + "\x1f" + body + "\x1f" + options;
+    if (key == _houseKey)
+        return;
+    std::string instance = "mm7/house/" + std::to_string(_houseInstance);
+    std::string collection = instance + "/state";
+    std::string subjectId = "mm7/house/id/" + std::to_string(_houseId);
+    Json fields = Json::array();
+    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "body",
+                                   "house greeting or response", "GUIWindow_House::Update", body));
+    fields.push_back(makeTextField(instance, collection, "house_instance", subjectId, "options",
+                                   "house dialogue option labels", "GUIWindow_House::Update", options));
+    if (sendTransaction(makeCollection(_sourceRun, instance, collection, "house_instance", kHouseCollectionKind,
+                                       subjectId, "house", "GUIWindow_House::houseId", heading,
+                                       "GUIWindow_House::Update", std::move(fields)))) {
+        _houseEmitted = true;
+        _houseKey = key;
+    }
+}
+
+void BlazonBridge::endHouse() {
+    if (!_enabled || _houseInstance == 0)
+        return;
+    if (_houseEmitted)
+        sendTransaction(makeEnd("house_instance", "mm7/house/" + std::to_string(_houseInstance)));
+    _houseInstance = 0;
+    _houseId = -1;
+    _houseEmitted = false;
+    _houseKey.clear();
+}
+
 void BlazonBridge::beginDialogue(int npcId) {
     if (!_enabled)
         return;
@@ -429,14 +498,18 @@ void BlazonBridge::beginPopupFrame() {
 void BlazonBridge::captureText(std::string_view text, bool title, int x, int y, int w, int h) {
     if (!_enabled)
         return;
-    if (!_inPopupFrame) {
+    if (!_inPopupFrame && !_inHouseFrame) {
         emitRawDraw(text, x, y, w, h);
         return;
     }
     std::string plain = stripFontCodes(text);
     if (plain.empty())
         return;
-    (title ? _popupTitles : _popupBody).push_back(std::move(plain));
+    if (_inPopupFrame) {
+        (title ? _popupTitles : _popupBody).push_back(std::move(plain));
+        return;
+    }
+    (title ? _houseTitles : _houseBody).push_back(std::move(plain));
 }
 
 void BlazonBridge::emitRawDraw(std::string_view text, int x, int y, int w, int h) {

@@ -86,6 +86,17 @@ class BlazonBridge {
     void observeMessage(std::string_view body);
     void endMessage();
 
+    /**
+     * Business screens (tavern, temple, bank, shops, guilds, training). One
+     * bracket around the house dialog manager captures the heading, the body
+     * and the option labels in draw order.
+     *
+     * @param houseId                   House identity, the subject.
+     */
+    void beginHouseFrame(int houseId);
+    void endHouseFrame();
+    void endHouse();
+
     void beginDialogue(int npcId);
     void observeDialogue(int npcId, std::string_view name, std::string_view body,
                          const std::vector<std::string> &options, int highlighted);
@@ -144,6 +155,14 @@ class BlazonBridge {
 
     int _eventStamp = 0;
     uint64_t _eventInstance = 0;
+
+    uint64_t _houseInstance = 0;
+    int _houseId = -1;
+    bool _inHouseFrame = false;
+    bool _houseEmitted = false;
+    std::string _houseKey;
+    std::vector<std::string> _houseTitles;
+    std::vector<std::string> _houseBody;
 
     uint64_t _messageInstance = 0;
     bool _messageEmitted = false;
