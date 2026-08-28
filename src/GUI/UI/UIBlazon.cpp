@@ -335,8 +335,7 @@ void BlazonBridge::observeMessage(std::string_view body) {
 void BlazonBridge::endMessage() {
     if (!_enabled || _messageInstance == 0)
         return;
-    if (_messageEmitted)
-        endLifetime("message_instance", "mm7/message/" + std::to_string(_messageInstance));
+    endLifetime("message_instance", "mm7/message/" + std::to_string(_messageInstance));
     _messageInstance = 0;
     _messageEmitted = false;
     _messageOperations.clear();
@@ -466,8 +465,7 @@ void BlazonBridge::emitHouseFocus(std::string_view focusedOption) {
 void BlazonBridge::endHouse() {
     if (!_enabled || _houseInstance == 0)
         return;
-    if (_houseEmitted)
-        endLifetime("house_instance", "mm7/house/" + std::to_string(_houseInstance));
+    endLifetime("house_instance", "mm7/house/" + std::to_string(_houseInstance));
     _houseInstance = 0;
     _houseId = -1;
     _houseEmitted = false;
@@ -551,8 +549,7 @@ void BlazonBridge::observeDialogue(int npcId, std::string_view name, std::string
 void BlazonBridge::endDialogue() {
     if (!_enabled || _dialogueInstance == 0)
         return;
-    if (_dialogueEmitted)
-        endLifetime("dialogue_instance", "mm7/dialogue/" + std::to_string(_dialogueInstance));
+    endLifetime("dialogue_instance", "mm7/dialogue/" + std::to_string(_dialogueInstance));
     _dialogueInstance = 0;
     _dialogueEmitted = false;
     _dialogueOperations.clear();
@@ -569,8 +566,7 @@ void BlazonBridge::observePopupHold(bool holding) {
         _popupEmitted = false;
         _popupText.clear();
     } else if (!holding && _popupHolding) {
-        if (_popupEmitted)
-            endPopup();
+        endPopup();
         _popupHolding = false;
         _popupInstance = 0;
         _popupText.clear();
@@ -669,8 +665,10 @@ void BlazonBridge::endPopup() {
 void BlazonBridge::sendInput(const char *action) {
     if (!_enabled)
         return;
-    if (!sendResync())
-        return;
+    if (std::strcmp(action, "stop") == 0)
+        flushPendingEnds();
+    else
+        sendResync();
     uint64_t sequence = _inputSequence + 1;
     Json input = Json{
         {"type", "input"},
@@ -708,6 +706,8 @@ bool BlazonBridge::sendTransactionDatagram(const std::string &operationsJson, bo
 }
 
 bool BlazonBridge::sendResync() {
+    if (!flushPendingEnds())
+        return false;
     Json operations = Json::array();
     appendOperations(operations, _currentOperations);
     appendOperations(operations, _popupOperations);
@@ -718,7 +718,7 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _houseFocusOperations);
     if (operations.empty())
         return true;
-    return sendTransaction(operations.dump(-1, ' ', false, Json::error_handler_t::replace), true);
+    return sendTransactionDatagram(operations.dump(-1, ' ', false, Json::error_handler_t::replace), true);
 }
 
 bool BlazonBridge::flushPendingEnds() {
