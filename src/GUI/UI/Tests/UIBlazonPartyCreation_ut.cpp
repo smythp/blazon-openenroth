@@ -1,5 +1,7 @@
 #include "Testing/Unit/UnitTest.h"
 
+#include <string>
+
 #include "GUI/UI/UIBlazonPartyCreation.h"
 
 UNIT_TEST(UIBlazonPartyCreation, StatSlot) {
