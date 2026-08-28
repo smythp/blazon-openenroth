@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "Application/GameConfig.h"
+
 #include "Engine/AssetsManager.h"
 #include "Engine/EngineGlobals.h"
 #include "Engine/Localization.h"
@@ -22,6 +24,9 @@ const std::string &StatusBar::get() {
 }
 
 void StatusBar::draw() {
+    if (render->config->graphics.FullscreenView.value())
+        return;
+
     render->DrawQuad2D(game_ui_statusbar, {0, 352});
 
     const std::string &status = get();

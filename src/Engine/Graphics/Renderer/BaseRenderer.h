@@ -38,6 +38,7 @@ class BaseRenderer : public Renderer {
 
     virtual Sizei GetRenderDimensions() override;
     virtual Sizei GetPresentDimensions() override;
+    virtual void updateViewport() override;
     virtual Pointi MapToRender(Pointi position) override;
     virtual Pointi MapToPresent(Pointi position) override;
 

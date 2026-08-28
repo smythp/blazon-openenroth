@@ -198,25 +198,34 @@ void Engine::Draw() {
 void Engine::DrawGUI() {
     render->ResetUIClipRect();
 
-    GameUI_DrawRightPanelFrames();
+    bool fullscreenView = config->graphics.FullscreenView.value();
+
+    if (!fullscreenView)
+        GameUI_DrawRightPanelFrames();
     _statusBar->draw();
 
-    if (!pMovie_Track && uGameState != GAME_STATE_CHANGE_LOCATION) {  // ! pVideoPlayer->pSmackerMovie)
-        GameUI_DrawMinimap(Recti(488, 16, 137, 117), viewparams->uMinimapZoom);
-    }
+    if (!fullscreenView) {
+        if (!pMovie_Track && uGameState != GAME_STATE_CHANGE_LOCATION) {  // ! pVideoPlayer->pSmackerMovie)
+            GameUI_DrawMinimap(Recti(488, 16, 137, 117), viewparams->uMinimapZoom);
+        }
 
-    GameUI_DrawPartySpells();
-    GameUI_DrawHiredNPCs();
+        GameUI_DrawPartySpells();
+        GameUI_DrawHiredNPCs();
 
-    GameUI_DrawPortraits();
-    GameUI_DrawLifeManaBars();
-    GameUI_DrawCharacterSelectionFrame();
-    if (_44100D_should_alter_right_panel()) GameUI_DrawRightPanel();
+        GameUI_DrawPortraits();
+        GameUI_DrawLifeManaBars();
+        GameUI_DrawCharacterSelectionFrame();
+        if (_44100D_should_alter_right_panel()) GameUI_DrawRightPanel();
 
-    if (!pMovie_Track) {
-        spell_fx_renedrer->DrawPlayerBuffAnims();
-        turnBasedOverlay.draw();
-        GameUI_DrawTorchlightAndWizardEye();
+        if (!pMovie_Track) {
+            spell_fx_renedrer->DrawPlayerBuffAnims();
+            turnBasedOverlay.draw();
+            GameUI_DrawTorchlightAndWizardEye();
+        }
+
+        if (current_screen_type == SCREEN_GAME &&
+            uCurrentlyLoadedLevelType == LEVEL_OUTDOOR)
+            pWeather->Draw();  // Ritor1: my include
     }
 
     static bool render_framerate = false;
@@ -224,10 +233,6 @@ void Engine::DrawGUI() {
     static unsigned frames_this_second = 0;
     static unsigned last_frame_time = platform->tickCount();
     static unsigned framerate_time_elapsed = 0;
-
-    if (current_screen_type == SCREEN_GAME &&
-        uCurrentlyLoadedLevelType == LEVEL_OUTDOOR)
-        pWeather->Draw();  // Ritor1: my include
 
     // while(GetTickCount() - last_frame_time < 33 );//FPS control
     unsigned frame_dt = platform->tickCount() - last_frame_time;
