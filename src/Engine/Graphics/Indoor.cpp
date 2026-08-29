@@ -1547,6 +1547,18 @@ void BLV_ProcessPartyActions() {  // could this be combined with odm process act
                 party_walking_flag = true;
                 break;
 
+            case PARTY_FastStrafeLeft:
+                pParty->velocity.x -= TrigLUT.sin(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
+                pParty->velocity.y += TrigLUT.cos(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
+                party_walking_flag = true;
+                break;
+
+            case PARTY_FastStrafeRight:
+                pParty->velocity.y -= TrigLUT.cos(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
+                pParty->velocity.x += TrigLUT.sin(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
+                party_walking_flag = true;
+                break;
+
             case PARTY_WalkForward:
                 pParty->velocity.x += TrigLUT.cos(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
                 pParty->velocity.y += TrigLUT.sin(pParty->_viewYaw) * pParty->walkSpeed * fWalkSpeedMultiplier;
@@ -1930,4 +1942,3 @@ float GetApproximateIndoorFloorZ(const Vec3f &pos, int *pSectorID, int *pFaceID)
     }
     return result; // Return the last result anyway.
 }
-
