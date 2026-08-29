@@ -750,6 +750,9 @@ static std::string toCompactString(int value) {
 
 //----- (0041AEBB) --------------------------------------------------------
 void GameUI_DrawFoodAndGold() {
+    if (engine->config->graphics.FullscreenView.value())
+        return;
+
     int text_y;  // esi@2
 
     if (uGameState != GAME_STATE_FINAL_WINDOW) {
