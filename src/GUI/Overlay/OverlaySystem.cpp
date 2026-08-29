@@ -40,7 +40,7 @@ void OverlaySystem::removeOverlay(std::string_view name) {
 }
 
 void OverlaySystem::drawOverlays() {
-    // Cycle Imgui even if overlays are disabled and we dont draw anything. This allows it to consume input events at the correct time - #1824.
+    // Cycle ImGui while overlays are disabled so queued input is processed on time when they are enabled - #1824.
     _renderer.beginOverlays();
     if (_isEnabled) {
         platform->setCursorShown(true);
