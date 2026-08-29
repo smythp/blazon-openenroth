@@ -20,7 +20,7 @@ bool OverlayEventHandler::keyEvent(PlatformKey key, PlatformModifiers mods, bool
     if (key == engine->config->keybindings.Console.value() || key == engine->config->gamepad.Console.value())
         return false; // Pass close console keys to the game to handle.
 
-    return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
+    return engine->isOverlayOpen() && ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
 }
 
 bool OverlayEventHandler::mousePressEvent(const PlatformMouseEvent *event) {
@@ -32,11 +32,11 @@ bool OverlayEventHandler::mouseReleaseEvent(const PlatformMouseEvent *event) {
 }
 
 bool OverlayEventHandler::mouseEvent(PlatformMouseButton button, const Pointi &pos, bool down) {
-    return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+    return engine->isOverlayOpen() && ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
 }
 
 bool OverlayEventHandler::wheelEvent(const PlatformWheelEvent *event) {
-    return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+    return engine->isOverlayOpen() && ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
 }
 
 bool OverlayEventHandler::nativeEvent(const PlatformNativeEvent *event) {
