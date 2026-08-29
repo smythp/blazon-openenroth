@@ -26,8 +26,10 @@ TargetedSpellUI_Hirelings::TargetedSpellUI_Hirelings(Pointi position, Sizei dime
     : TargetedSpellUI(WINDOW_CastSpell, position, dimensions, spellInfo, hint) {
     CreateButton({469, 178}, ui_btn_npc_left->size(), BUTTON_TYPE_NORMAL, 0, UIMSG_ScrollNPCPanel, 0, INPUT_ACTION_INVALID, "", {ui_btn_npc_left});
     CreateButton({626, 178}, ui_btn_npc_right->size(), BUTTON_TYPE_NORMAL, 0, UIMSG_ScrollNPCPanel, 1, INPUT_ACTION_INVALID, "", {ui_btn_npc_right});
-    CreateButton({491, 149}, {64, 74}, BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_Hireling, 0, INPUT_ACTION_SELECT_NPC_1);
-    CreateButton({561, 149}, {64, 74}, BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_Hireling, 1, INPUT_ACTION_SELECT_NPC_2);
+    addChromeTargetButton(
+        CreateButton({491, 149}, {64, 74}, BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_Hireling, 0, INPUT_ACTION_SELECT_NPC_1));
+    addChromeTargetButton(
+        CreateButton({561, 149}, {64, 74}, BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_Hireling, 1, INPUT_ACTION_SELECT_NPC_2));
 }
 
 TargetedSpellUI_Character::TargetedSpellUI_Character(Pointi position, Sizei dimensions, CastSpellInfo *spellInfo, std::string_view hint)
@@ -55,15 +57,29 @@ void TargetedSpellUI::createViewportButton(UIMessageType message) {
     _viewportButton = CreateButton(pViewport.topLeft(), pViewport.size(), BUTTON_TYPE_NORMAL, 0, message, 0);
 }
 
+void TargetedSpellUI::addChromeTargetButton(GUIButton *button) {
+    _chromeTargetButtons.push_back({button, button->rect});
+    if (engine->config->graphics.FullscreenView.value())
+        button->rect = {};
+}
+
 void TargetedSpellUI::updateViewportButtons() {
     if (_viewportButton)
-        _viewportButton->rect = Recti(pViewport.topLeft() + frameRect.topLeft(), {pViewport.w + 1, pViewport.h + 1});
+        _viewportButton->rect = Recti(pViewport.x + frameRect.x, pViewport.y + frameRect.y, pViewport.w + 1, pViewport.h + 1);
+
+    bool fullscreenView = engine->config->graphics.FullscreenView.value();
+    for (ChromeTargetButton &target : _chromeTargetButtons)
+        target.button->rect = fullscreenView ? Recti{} : target.rect;
 }
 
 void TargetedSpellUI::CreateButtonsTargetCharacters() {
     // TODO(pskelton): why is position / size different to normal character buttons
-    CreateButton({52, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 0, INPUT_ACTION_SELECT_CHAR_1);
-    CreateButton({165, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 1, INPUT_ACTION_SELECT_CHAR_2);
-    CreateButton({280, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 2, INPUT_ACTION_SELECT_CHAR_3);
-    CreateButton({390, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 3, INPUT_ACTION_SELECT_CHAR_4);
+    addChromeTargetButton(
+        CreateButton({52, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 0, INPUT_ACTION_SELECT_CHAR_1));
+    addChromeTargetButton(
+        CreateButton({165, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 1, INPUT_ACTION_SELECT_CHAR_2));
+    addChromeTargetButton(
+        CreateButton({280, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 2, INPUT_ACTION_SELECT_CHAR_3));
+    addChromeTargetButton(
+        CreateButton({390, 422}, {35, 0}, BUTTON_TYPE_CHARACTER, 0, UIMSG_CastSpell_TargetCharacter, 3, INPUT_ACTION_SELECT_CHAR_4));
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "GUI/GUIWindow.h"
 
@@ -18,10 +19,17 @@ class TargetedSpellUI : public GUIWindow {
     void CreateButtonsTargetCharacters();
 
  protected:
+    void addChromeTargetButton(GUIButton *button);
     void createViewportButton(UIMessageType message);
 
  private:
+    struct ChromeTargetButton {
+        GUIButton *button;
+        Recti rect;
+    };
+
     CastSpellInfo *_spellInfo = nullptr;
+    std::vector<ChromeTargetButton> _chromeTargetButtons;
     GUIButton *_viewportButton = nullptr;
 };
 
