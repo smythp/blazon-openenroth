@@ -230,7 +230,8 @@ void GameWindowHandler::OnMouseRightClick(Pointi position) {
     // rendering (called from `GUI_UpdateWindows`) and one for press-time actions (called from here). When that split
     // happens, this `tryUseItemOnPortrait` call should be folded into the actions function so all "right-click
     // mutates something" paths sit alongside each other in the press handler.
-    if (tryUseItemOnPortrait(position))
+    bool fullscreenView = engine->config->graphics.FullscreenView.value() && current_screen_type == SCREEN_GAME;
+    if (!fullscreenView && tryUseItemOnPortrait(position))
         return; // Item used on character, do not enter popup mode.
 
     // OK, enter popup mode!
