@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "Application/GameConfig.h"
+
 #include "Engine/OurMath.h"
 #include "Engine/Time/Timer.h"
 #include "Engine/Party.h"
@@ -1168,8 +1170,10 @@ void SpellFxRenderer::DrawPlayerBuffAnims() {
             continue;
         }
 
-        GraphicsImage *icon = pIconsFrameTable->animationFrame(buff->uSpellIconID, buff->uSpellAnimTimeElapsed);
-        render->DrawQuad2D(icon, {pPlayerPortraitsXCoords_For_PlayerBuffAnimsDrawing[i], 385});
+        if (!render->config->graphics.FullscreenView.value()) {
+            GraphicsImage *icon = pIconsFrameTable->animationFrame(buff->uSpellIconID, buff->uSpellAnimTimeElapsed);
+            render->DrawQuad2D(icon, {pPlayerPortraitsXCoords_For_PlayerBuffAnimsDrawing[i], 385});
+        }
     }
 }
 

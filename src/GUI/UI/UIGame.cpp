@@ -750,16 +750,15 @@ static std::string toCompactString(int value) {
 
 //----- (0041AEBB) --------------------------------------------------------
 void GameUI_DrawFoodAndGold() {
-    if (engine->config->graphics.FullscreenView.value())
-        return;
-
     int text_y;  // esi@2
 
     if (uGameState != GAME_STATE_FINAL_WINDOW) {
-        text_y = _44100D_should_alter_right_panel() != 0 ? 381 : 322;
+        if (!engine->config->graphics.FullscreenView.value()) {
+            text_y = _44100D_should_alter_right_panel() != 0 ? 381 : 322;
 
-        GUIWindow::DrawText(assets->pFontSmallnum.get(), {0, text_y}, uGameUIFontMain, fmt::format("\r087{}", toCompactString(pParty->GetFood())), pPrimaryWindow->frameRect, 0, uGameUIFontShadow);
-        GUIWindow::DrawText(assets->pFontSmallnum.get(), {0, text_y}, uGameUIFontMain, fmt::format("\r028{}", toCompactString(pParty->GetGold())), pPrimaryWindow->frameRect, 0, uGameUIFontShadow);
+            GUIWindow::DrawText(assets->pFontSmallnum.get(), {0, text_y}, uGameUIFontMain, fmt::format("\r087{}", toCompactString(pParty->GetFood())), pPrimaryWindow->frameRect, 0, uGameUIFontShadow);
+            GUIWindow::DrawText(assets->pFontSmallnum.get(), {0, text_y}, uGameUIFontMain, fmt::format("\r028{}", toCompactString(pParty->GetGold())), pPrimaryWindow->frameRect, 0, uGameUIFontShadow);
+        }
         // force to render all queued text now so it wont be delayed and drawn over things it isn't supposed to, like item in hand or nuklear
         render->EndTextNew();
     }
@@ -1265,8 +1264,6 @@ void GameUI_DrawPartySpells() {
 //----- (004921C1) --------------------------------------------------------
 void GameUI_DrawPortraits() {
     GraphicsImage *pPortrait;                 // [sp-4h] [bp-1Ch]@27
-
-    pParty->updateDelayedReaction();
 
     for (int i = 0; i < pParty->pCharacters.size(); ++i) {
         Character *pPlayer = &pParty->pCharacters[i];
