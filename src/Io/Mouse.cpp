@@ -237,6 +237,15 @@ void Io::Mouse::UI_OnMouseLeftClick() {
     int x = mousePos.x;
     int y = mousePos.y;
 
+    if (engine->config->graphics.FullscreenView.value() &&
+        GetCurrentMenuID() == MENU_NONE && current_screen_type == SCREEN_GAME &&
+        !keyboardInputHandler->IsStealingToggled() && !pGUIWindow_CastTargetedSpell &&
+        pViewport.contains(mousePos)) {
+        engine->_messageQueue->clear();
+        engine->_messageQueue->addMessageCurrentFrame(UIMSG_MouseLeftClickInGame, 0, 0);
+        return;
+    }
+
     if (GetCurrentMenuID() != MENU_NONE || current_screen_type != SCREEN_GAME ||
         !keyboardInputHandler->IsStealingToggled() || !pViewport.contains(Pointi(x, y))) {
         std::list<GUIWindow*> targetedSpellUI = {pGUIWindow_CastTargetedSpell.get()};

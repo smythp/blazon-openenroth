@@ -8,6 +8,7 @@
 #include "Arcomage/Arcomage.h"
 
 #include "GUI/UI/UIPopup.h"
+#include "GUI/UI/UISpell.h"
 
 #include "Engine/Engine.h"
 #include "Engine/Resources/EngineFileSystem.h"
@@ -316,6 +317,8 @@ void GameWindowHandler::OnKey(PlatformKey key) {
         if (current_screen_type == SCREEN_GAME) {
             engine->config->graphics.FullscreenView.toggle();
             render->updateViewport();
+            if (pGUIWindow_CastTargetedSpell)
+                pGUIWindow_CastTargetedSpell->updateViewportButtons();
             if (mouse->_mouseLook == Io::Mouse::MouseLookState::Enabled)
                 mouse->setPosition(pViewport.center());
         }
