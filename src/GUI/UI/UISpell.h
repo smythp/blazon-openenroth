@@ -14,10 +14,15 @@ class TargetedSpellUI : public GUIWindow {
         return _spellInfo;
     }
 
+    void updateViewportButtons();
     void CreateButtonsTargetCharacters();
+
+ protected:
+    void createViewportButton(UIMessageType message);
 
  private:
     CastSpellInfo *_spellInfo = nullptr;
+    GUIButton *_viewportButton = nullptr;
 };
 
 class TargetedSpellUI_Hirelings : public TargetedSpellUI {

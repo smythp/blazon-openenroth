@@ -6,6 +6,8 @@
 #include "Engine/Graphics/Image.h"
 #include "Engine/Time/Timer.h"
 
+#include "GUI/GUIButton.h"
+
 #include "Io/Mouse.h"
 
 #include "UIStatusBar.h"
@@ -35,18 +37,27 @@ TargetedSpellUI_Character::TargetedSpellUI_Character(Pointi position, Sizei dime
 
 TargetedSpellUI_Actor::TargetedSpellUI_Actor(Pointi position, Sizei dimensions, CastSpellInfo *spellInfo, std::string_view hint)
     : TargetedSpellUI(WINDOW_CastSpell, position, dimensions, spellInfo, hint) {
-    CreateButton(pViewport.topLeft(), pViewport.size(), BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_TargetActor, 0);
+    createViewportButton(UIMSG_CastSpell_TargetActor);
 }
 
 TargetedSpellUI_ActorOrCharacter::TargetedSpellUI_ActorOrCharacter(Pointi position, Sizei dimensions, CastSpellInfo *spellInfo, std::string_view hint)
     : TargetedSpellUI(WINDOW_CastSpell, position, dimensions, spellInfo, hint) {
     CreateButtonsTargetCharacters();
-    CreateButton(pViewport.topLeft(), pViewport.size(), BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_TargetActorBuff, 0);
+    createViewportButton(UIMSG_CastSpell_TargetActorBuff);
 }
 
 TargetedSpellUI_Telekinesis::TargetedSpellUI_Telekinesis(Pointi position, Sizei dimensions, CastSpellInfo *spellInfo, std::string_view hint)
     : TargetedSpellUI(WINDOW_CastSpell, position, dimensions, spellInfo, hint) {
-    CreateButton(pViewport.topLeft(), pViewport.size(), BUTTON_TYPE_NORMAL, 0, UIMSG_CastSpell_Telekinesis, 0);
+    createViewportButton(UIMSG_CastSpell_Telekinesis);
+}
+
+void TargetedSpellUI::createViewportButton(UIMessageType message) {
+    _viewportButton = CreateButton(pViewport.topLeft(), pViewport.size(), BUTTON_TYPE_NORMAL, 0, message, 0);
+}
+
+void TargetedSpellUI::updateViewportButtons() {
+    if (_viewportButton)
+        _viewportButton->rect = Recti(pViewport.topLeft() + frameRect.topLeft(), {pViewport.w + 1, pViewport.h + 1});
 }
 
 void TargetedSpellUI::CreateButtonsTargetCharacters() {
