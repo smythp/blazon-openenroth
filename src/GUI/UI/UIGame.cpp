@@ -870,8 +870,10 @@ void GameUI_WritePointedObjectStatusString() {
     };
 
     if (current_screen_type == SCREEN_GAME) {
-        if (pX <= (renDims.w - 1) * 0.73125 &&
-            pY <= (renDims.h - 1) * 0.73125) {
+        bool insideGameViewport = engine->config->graphics.FullscreenView.value()
+                                  ? pViewport.contains(mousePos)
+                                  : pX <= (renDims.w - 1) * 0.73125 && pY <= (renDims.h - 1) * 0.73125;
+        if (insideGameViewport) {
             if (!pViewport.contains(Pointi(pX, pY))) {
                 if (uLastPointedObjectID) {
                     engine->_statusBar->clearPermanent();
