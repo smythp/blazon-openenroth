@@ -202,6 +202,8 @@ void GUIWindow_QuestBook::Update() {
         .title = localization->str(LSTR_CURRENT_QUESTS),
         .emptyText = "No current quests.",
         .totalMembers = static_cast<int>(_activeQuestsIdx.size()),
+        .totalMembersDisplay = std::to_string(_activeQuestsIdx.size()) +
+                               (_activeQuestsIdx.size() == 1 ? " quest" : " quests"),
         .page = _currentPage,
         .pageCount = static_cast<int>(_questsPerPage.size()),
     };

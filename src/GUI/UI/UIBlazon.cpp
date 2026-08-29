@@ -1667,7 +1667,7 @@ bool BlazonBridge::emitBookEntry(const BlazonBookPage &page, const char *hook) {
     fields.push_back(makeBookField(instance, collection, "entry", subjectId, "count",
                                    "book table active-member count", hook,
                                    Json{{"type", "integer"}, {"integer", page.totalMembers},
-                                        {"display", std::to_string(page.totalMembers)}}));
+                                        {"display", page.totalMembersDisplay}}));
     fields.push_back(makeBookField(instance, collection, "entry", subjectId, "page",
                                    "book paging state", hook,
                                    Json{{"type", "integer"}, {"integer", page.page + 1},
@@ -1730,6 +1730,7 @@ void BlazonBridge::observeBookPage(const BlazonBookPage &rawPage, const char *ho
     page.bookCode = gameTextToUtf8(page.bookCode);
     page.title = gameTextToUtf8(page.title);
     page.emptyText = gameTextToUtf8(page.emptyText);
+    page.totalMembersDisplay = gameTextToUtf8(page.totalMembersDisplay);
     for (BlazonBookMember &member : page.members) {
         member.identityKind = gameTextToUtf8(member.identityKind);
         member.identityCode = gameTextToUtf8(member.identityCode);
@@ -1749,8 +1750,9 @@ void BlazonBridge::observeBookPage(const BlazonBookPage &rawPage, const char *ho
         _bookPageChangeOperations.clear();
     }
 
-    std::string key = fmt::format("{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}", page.bookCode,
-                                  page.title, page.emptyText, page.totalMembers, page.page, page.pageCount);
+    std::string key = fmt::format("{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}", page.bookCode,
+                                  page.title, page.emptyText, page.totalMembers, page.totalMembersDisplay,
+                                  page.page, page.pageCount);
     for (const BlazonBookMember &member : page.members)
         key += fmt::format("\x1f{}\x1f{}\x1f{}\x1f{}", member.identityKind,
                            member.identityCode, member.identityName, member.text);
@@ -1830,6 +1832,8 @@ bool BlazonBridge::emitPortraitVitals(int characterSlot, const std::string &inst
 void BlazonBridge::observePortraitHover(const GUIWindow &window, bool visible) {
     if (!_enabled)
         return;
+    if (current_screen_type == SCREEN_BOOKS)
+        visible = false;
     int characterSlot = -1;
     if (visible) {
         Pointi pointer = EngineIocContainer::ResolveMouse()->position();

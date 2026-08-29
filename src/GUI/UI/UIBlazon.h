@@ -41,6 +41,7 @@ struct BlazonBookPage {
     std::string title;
     std::string emptyText;
     int totalMembers = 0;
+    std::string totalMembersDisplay;
     int page = 0;
     int pageCount = 0;
     std::vector<BlazonBookMember> members;
