@@ -29,6 +29,19 @@ UNIT_TEST(UIBlazon, DialogueConversationEndsWithExit) {
               std::vector<std::string>({"More Information", "Hire", "Exit"}));
 }
 
+UNIT_TEST(UIBlazon, BookPagePreservesMemberOrder) {
+    std::vector<BlazonBookMember> members = {
+        {.identityKind = "quest_bit", .identityCode = "75", .text = "First quest."},
+        {.identityKind = "quest_bit", .identityCode = "157", .text = "Second quest."},
+    };
+
+    EXPECT_EQ(BlazonBridge::bookPageText(members, "No quests."), "First quest. Second quest.");
+}
+
+UNIT_TEST(UIBlazon, EmptyBookPageSaysSo) {
+    EXPECT_EQ(BlazonBridge::bookPageText({}, "No current quests."), "No current quests.");
+}
+
 UNIT_TEST(UIBlazon, BuyWareUsesItemNameAndCurrentPrice) {
     BlazonWare ware = {.name = "Elven Saber", .price = 412};
 

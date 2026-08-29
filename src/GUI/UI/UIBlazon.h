@@ -29,6 +29,24 @@ struct BlazonWare {
     std::string schoolName;
 };
 
+struct BlazonBookMember {
+    std::string identityKind;
+    std::string identityCode;
+    std::string identityName;
+    std::string text;
+};
+
+struct BlazonBookPage {
+    std::string bookCode;
+    std::string title;
+    std::string emptyText;
+    int totalMembers = 0;
+    std::string totalMembersDisplay;
+    int page = 0;
+    int pageCount = 0;
+    std::vector<BlazonBookMember> members;
+};
+
 /**
  * Blazon bridge for OpenEnroth.
  *
@@ -38,8 +56,8 @@ struct BlazonWare {
  * ScummVM Xeen bridge does. It never speaks and never reads game input.
  *
  * Most scopes capture strings from the status bar and popup composers.
- * Party creation and portrait vitals instead emit typed identity and values
- * directly from game state and localization tables.
+ * Party creation, portrait vitals and book pages instead emit typed identity
+ * and values directly from game state and localization tables.
  */
 class BlazonBridge {
  public:
@@ -170,6 +188,27 @@ class BlazonBridge {
     void endCharacterRecord();
 
     /**
+     * Current page of one book-family window. The first observation starts the
+     * book lifetime and emits its entry announcement. Later page-number changes
+     * also emit an automatic page-change occurrence.
+     *
+     * @param page                      Book identity, paging state and ordered members.
+     * @param hook                      Book composer that supplied the state.
+     */
+    void observeBookPage(const BlazonBookPage &page, const char *hook);
+    void endBook();
+
+    /**
+     * Joins ordered book members for the current Voice mapper.
+     *
+     * @param members                   Members in book reading order.
+     * @param emptyText                 Line used when the page has no members.
+     * @return                          Sentence-separated member text, or an empty-page line.
+     */
+    static std::string bookPageText(const std::vector<BlazonBookMember> &members,
+                                    std::string_view emptyText);
+
+    /**
      * Observes the party portrait under the pointer once per HUD frame. A
      * portrait entry begins one vitals instance. Leaving or entering another
      * portrait ends it. Character changes within an instance stay silent.
@@ -293,6 +332,9 @@ class BlazonBridge {
     bool emitCharacterRecordState(const CharacterRecordState &state);
     bool emitCharacterRecordEntry(const CharacterRecordState &state);
     bool emitCharacterRecordFocus(const CharacterRecordFocus &focus);
+    bool emitBookEntry(const BlazonBookPage &page, const char *hook);
+    bool emitBookPage(const BlazonBookPage &page, const char *hook,
+                      const char *collectionSuffix, std::string *operations);
     bool emitPortraitVitals(int characterSlot, const std::string &instance,
                             const char *lifetimeKind, const char *collectionKind,
                             const char *hook, std::string *operations);
@@ -387,6 +429,15 @@ class BlazonBridge {
     std::string _characterRecordOperations;
     std::string _characterRecordEntryOperations;
     std::string _characterRecordFocusOperations;
+
+    uint64_t _bookInstance = 0;
+    bool _bookEntryEmitted = false;
+    int _bookPage = -1;
+    std::string _bookCode;
+    std::string _bookPageKey;
+    std::string _bookEntryOperations;
+    std::string _bookPageOperations;
+    std::string _bookPageChangeOperations;
 
     uint64_t _portraitHoverInstance = 0;
     int _portraitHoverSlot = -1;

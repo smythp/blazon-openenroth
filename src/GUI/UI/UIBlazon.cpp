@@ -74,6 +74,10 @@ constexpr const char *kGameSubjectId = "mm7/game";
 constexpr const char *kPartyCreationSubjectId = "mm7/party-creation";
 constexpr const char *kCharacterRecordSubjectId = "mm7/character-record";
 
+std::string bookCollectionKind(const std::string &bookCode, const char *suffix) {
+    return fmt::format("mm7.book.{}.{}.state", bookCode, suffix);
+}
+
 Json makeLifetime(const char *kind, const std::string &id) {
     return Json{{"kind", kind}, {"id", id}};
 }
@@ -125,6 +129,22 @@ Json makeIntegerField(const std::string &instance, const std::string &collection
                            Json{{"type", "integer"}, {"integer", value}, {"display", std::to_string(value)}});
     field["label"] = Json{{"text", label}, {"origin", "runtime_resource"}};
     return field;
+}
+
+Json makeBookField(const std::string &instance, const std::string &collection, const char *scope,
+                   const std::string &subjectId, const char *key, const char *origin,
+                   const char *hook, Json value) {
+    Json field = makeField(instance, collection, "book_instance", subjectId.c_str(), key,
+                           origin, hook, std::move(value));
+    field["id"] = instance + "/" + scope + "/field/" + key;
+    return field;
+}
+
+Json makeBookTextField(const std::string &instance, const std::string &collection, const char *scope,
+                       const std::string &subjectId, const char *key, const char *origin,
+                       const char *hook, const std::string &text) {
+    return makeBookField(instance, collection, scope, subjectId, key, origin, hook,
+                         Json{{"type", "text"}, {"text", text}, {"display", text}});
 }
 
 // A complete collection of text fields under one subject, as one replace with the subject upserted first.
@@ -1627,6 +1647,142 @@ void BlazonBridge::endCharacterRecord() {
     _characterRecordFocusOperations.clear();
 }
 
+std::string BlazonBridge::bookPageText(const std::vector<BlazonBookMember> &members,
+                                       std::string_view emptyText) {
+    if (members.empty())
+        return std::string(emptyText);
+    std::string result;
+    for (const BlazonBookMember &member : members)
+        appendSentence(result, member.text);
+    return result;
+}
+
+bool BlazonBridge::emitBookEntry(const BlazonBookPage &page, const char *hook) {
+    if (_bookEntryEmitted)
+        return true;
+    std::string instance = "mm7/book/" + page.bookCode + "/" + std::to_string(_bookInstance);
+    std::string collection = instance + "/entry";
+    std::string subjectId = "mm7/book/" + page.bookCode;
+    Json fields = Json::array();
+    fields.push_back(makeBookField(instance, collection, "entry", subjectId, "count",
+                                   "book table active-member count", hook,
+                                   Json{{"type", "integer"}, {"integer", page.totalMembers},
+                                        {"display", page.totalMembersDisplay}}));
+    fields.push_back(makeBookField(instance, collection, "entry", subjectId, "page",
+                                   "book paging state", hook,
+                                   Json{{"type", "integer"}, {"integer", page.page + 1},
+                                        {"display", std::to_string(page.page + 1)}}));
+    fields.push_back(makeBookField(instance, collection, "entry", subjectId, "page_count",
+                                   "book paging state", hook,
+                                   Json{{"type", "integer"}, {"integer", page.pageCount},
+                                        {"display", std::to_string(page.pageCount)}}));
+    std::string collectionKind = bookCollectionKind(page.bookCode, "entry");
+    std::string operations = makeCollection(
+        _sourceRun, instance, collection, "book_instance", collectionKind.c_str(), subjectId, "screen",
+        "GUIWindow_Book", page.title, hook, std::move(fields));
+    if (!sendTransaction(operations))
+        return false;
+    _bookEntryEmitted = true;
+    _bookEntryOperations = std::move(operations);
+    return true;
+}
+
+bool BlazonBridge::emitBookPage(const BlazonBookPage &page, const char *hook,
+                                const char *collectionSuffix, std::string *operations) {
+    std::string instance = "mm7/book/" + page.bookCode + "/" + std::to_string(_bookInstance);
+    std::string collection = instance + "/" + collectionSuffix;
+    std::string subjectId = "mm7/book/" + page.bookCode;
+    Json fields = Json::array();
+    fields.push_back(makeBookField(instance, collection, collectionSuffix, subjectId, "page",
+                                   "book paging state", hook,
+                                   Json{{"type", "integer"}, {"integer", page.page + 1},
+                                        {"display", std::to_string(page.page + 1)}}));
+    fields.push_back(makeBookField(instance, collection, collectionSuffix, subjectId, "page_count",
+                                   "book paging state", hook,
+                                   Json{{"type", "integer"}, {"integer", page.pageCount},
+                                        {"display", std::to_string(page.pageCount)}}));
+    fields.push_back(makeBookTextField(instance, collection, collectionSuffix, subjectId, "contents",
+                                       "ordered identity-bearing book members", hook,
+                                       gameTextToUtf8(bookPageText(page.members, page.emptyText))));
+    for (const BlazonBookMember &member : page.members) {
+        std::string key = member.identityKind + "/" + member.identityCode;
+        Json field = makeBookTextField(instance, collection, collectionSuffix, subjectId, key.c_str(),
+                                       "book table member", hook, member.text);
+        field["identity"] = Json{{"kind", member.identityKind}, {"code", member.identityCode}};
+        if (!member.identityName.empty())
+            field["identity"]["name"] = member.identityName;
+        fields.push_back(std::move(field));
+    }
+    std::string collectionKind = bookCollectionKind(page.bookCode, collectionSuffix);
+    std::string next = makeCollection(
+        _sourceRun, instance, collection, "book_instance", collectionKind.c_str(), subjectId, "screen",
+        "GUIWindow_Book", page.title, hook, std::move(fields));
+    if (!sendTransaction(next))
+        return false;
+    *operations = std::move(next);
+    return true;
+}
+
+void BlazonBridge::observeBookPage(const BlazonBookPage &rawPage, const char *hook) {
+    if (!_enabled)
+        return;
+    BlazonBookPage page = rawPage;
+    page.bookCode = gameTextToUtf8(page.bookCode);
+    page.title = gameTextToUtf8(page.title);
+    page.emptyText = gameTextToUtf8(page.emptyText);
+    page.totalMembersDisplay = gameTextToUtf8(page.totalMembersDisplay);
+    for (BlazonBookMember &member : page.members) {
+        member.identityKind = gameTextToUtf8(member.identityKind);
+        member.identityCode = gameTextToUtf8(member.identityCode);
+        member.identityName = gameTextToUtf8(member.identityName);
+        member.text = gameTextToUtf8(member.text);
+    }
+    if (_bookInstance != 0 && _bookCode != page.bookCode)
+        endBook();
+    if (_bookInstance == 0) {
+        _bookInstance = ++_instanceSequence;
+        _bookCode = page.bookCode;
+        _bookEntryEmitted = false;
+        _bookPage = -1;
+        _bookPageKey.clear();
+        _bookEntryOperations.clear();
+        _bookPageOperations.clear();
+        _bookPageChangeOperations.clear();
+    }
+
+    std::string key = fmt::format("{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}", page.bookCode,
+                                  page.title, page.emptyText, page.totalMembers, page.totalMembersDisplay,
+                                  page.page, page.pageCount);
+    for (const BlazonBookMember &member : page.members)
+        key += fmt::format("\x1f{}\x1f{}\x1f{}\x1f{}", member.identityKind,
+                           member.identityCode, member.identityName, member.text);
+    bool pageChanged = _bookPage >= 0 && page.page != _bookPage;
+    if (key != _bookPageKey) {
+        if (!emitBookPage(page, hook, "page", &_bookPageOperations))
+            return;
+        _bookPageKey = std::move(key);
+        _bookPage = page.page;
+    }
+    if (!emitBookEntry(page, hook))
+        return;
+    if (pageChanged)
+        emitBookPage(page, hook, "page_change", &_bookPageChangeOperations);
+}
+
+void BlazonBridge::endBook() {
+    if (!_enabled || _bookInstance == 0)
+        return;
+    endLifetime("book_instance", "mm7/book/" + _bookCode + "/" + std::to_string(_bookInstance));
+    _bookInstance = 0;
+    _bookEntryEmitted = false;
+    _bookPage = -1;
+    _bookCode.clear();
+    _bookPageKey.clear();
+    _bookEntryOperations.clear();
+    _bookPageOperations.clear();
+    _bookPageChangeOperations.clear();
+}
+
 bool BlazonBridge::emitPortraitVitals(int characterSlot, const std::string &instance,
                                       const char *lifetimeKind, const char *collectionKind,
                                       const char *hook, std::string *operations) {
@@ -1676,6 +1832,8 @@ bool BlazonBridge::emitPortraitVitals(int characterSlot, const std::string &inst
 void BlazonBridge::observePortraitHover(const GUIWindow &window, bool visible) {
     if (!_enabled)
         return;
+    if (current_screen_type == SCREEN_BOOKS)
+        visible = false;
     int characterSlot = -1;
     if (visible) {
         Pointi pointer = EngineIocContainer::ResolveMouse()->position();
@@ -1909,6 +2067,8 @@ bool BlazonBridge::sendResync() {
     appendOperations(operations, _characterRecordOperations);
     appendOperations(operations, _characterRecordEntryOperations);
     appendOperations(operations, _characterRecordFocusOperations);
+    appendOperations(operations, _bookEntryOperations);
+    appendOperations(operations, _bookPageOperations);
     appendOperations(operations, _portraitHoverOperations);
     appendOperations(operations, _portraitSelectionOperations);
     if (operations.empty())

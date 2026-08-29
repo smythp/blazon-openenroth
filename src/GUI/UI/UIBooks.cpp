@@ -10,10 +10,12 @@
 #include "GUI/GUIFont.h"
 #include "GUI/GUIButton.h"
 #include "GUI/UI/UIBooks.h"
+#include "GUI/UI/UIBlazon.h"
 
 #include "Media/Audio/AudioPlayer.h"
 
 GUIWindow_Book::~GUIWindow_Book() {
+    BlazonBridge::instance().endBook();
     if (ui_book_map_frame) {
         ui_book_map_frame->release();
     }
