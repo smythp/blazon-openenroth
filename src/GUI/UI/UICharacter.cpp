@@ -556,6 +556,7 @@ GUIWindow_CharacterRecord::GUIWindow_CharacterRecord(int uActiveCharacter, Scree
     bRingsShownInCharScreen = false;
     CharacterUI_LoadPaperdollTextures();
     current_screen_type = screen;
+    engine->updateViewport();
 
     pCharacterScreen_StatsBtn = CreateButton(pViewport.topLeft() + Pointi(12, 308),
                                              paperdoll_dbrds[9]->size(), BUTTON_TYPE_NORMAL, 0,

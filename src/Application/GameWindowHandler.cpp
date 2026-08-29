@@ -299,9 +299,7 @@ void GameWindowHandler::OnKey(PlatformKey key) {
     } else if (keyboardActionMapping->isBound(INPUT_ACTION_TOGGLE_FULLSCREEN_VIEW, key)) {
         if (current_screen_type == SCREEN_GAME) {
             engine->config->graphics.FullscreenView.toggle();
-            render->updateViewport();
-            if (pGUIWindow_CastTargetedSpell)
-                pGUIWindow_CastTargetedSpell->updateViewportButtons();
+            engine->updateViewport();
             if (mouse->_mouseLook == Io::Mouse::MouseLookState::Enabled)
                 mouse->setPosition(pViewport.center());
         }
