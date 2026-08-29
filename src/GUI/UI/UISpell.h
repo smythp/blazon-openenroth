@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-
 #include "GUI/GUIWindow.h"
 
 struct CastSpellInfo;
@@ -14,10 +13,19 @@ class TargetedSpellUI : public GUIWindow {
         return _spellInfo;
     }
 
+    GUIButton *viewportButton() const {
+        return _viewportButton;
+    }
+
+    void updateViewportButtons();
     void CreateButtonsTargetCharacters();
+
+ protected:
+    void createViewportButton(UIMessageType message);
 
  private:
     CastSpellInfo *_spellInfo = nullptr;
+    GUIButton *_viewportButton = nullptr;
 };
 
 class TargetedSpellUI_Hirelings : public TargetedSpellUI {

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "Application/GameConfig.h"
+
 #include "Engine/OurMath.h"
 #include "Engine/Time/Timer.h"
 #include "Engine/Party.h"
@@ -21,6 +23,8 @@
 #include "Engine/Random/Random.h"
 
 #include "Engine/Tables/IconFrameTable.h"
+
+#include "GUI/GUIWindow.h"
 
 //----- (004A7063) --------------------------------------------------------
 Color ModulateColor(Color diffuse, float multiplier) {
@@ -1168,8 +1172,10 @@ void SpellFxRenderer::DrawPlayerBuffAnims() {
             continue;
         }
 
-        GraphicsImage *icon = pIconsFrameTable->animationFrame(buff->uSpellIconID, buff->uSpellAnimTimeElapsed);
-        render->DrawQuad2D(icon, {pPlayerPortraitsXCoords_For_PlayerBuffAnimsDrawing[i], 385});
+        if (!render->config->graphics.FullscreenView.value() || current_screen_type != SCREEN_GAME) {
+            GraphicsImage *icon = pIconsFrameTable->animationFrame(buff->uSpellIconID, buff->uSpellAnimTimeElapsed);
+            render->DrawQuad2D(icon, {pPlayerPortraitsXCoords_For_PlayerBuffAnimsDrawing[i], 385});
+        }
     }
 }
 

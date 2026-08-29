@@ -29,6 +29,8 @@
 #include "Engine/EngineGlobals.h"
 #include "Engine/Random/Random.h"
 
+#include "GUI/GUIWindow.h"
+
 #include "Library/Logger/Logger.h"
 
 #include "Utility/Math/TrigLut.h"
@@ -590,7 +592,7 @@ void BaseRenderer::updateRenderDimensions() {
 
 void BaseRenderer::updateViewport() {
     // Set viewport from config values (inclusive TL/BR coordinates).
-    bool fullscreenView = config->graphics.FullscreenView.value();
+    bool fullscreenView = config->graphics.FullscreenView.value() && current_screen_type == SCREEN_GAME;
     int tlX = fullscreenView ? 0 : config->graphics.ViewPortX1.value();  // 8 in vanilla
     int tlY = fullscreenView ? 0 : config->graphics.ViewPortY1.value();  // 8 in vanilla
     int brX = fullscreenView ? outputRender.w - 1 : outputRender.w - config->graphics.ViewPortX2.value();  // 468 in vanilla

@@ -12,6 +12,7 @@
 #include "Engine/Graphics/Renderer/Renderer.h"
 
 #include "GUI/GUIFont.h"
+#include "GUI/GUIWindow.h"
 
 #include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIGame.h"
@@ -28,7 +29,7 @@ void StatusBar::draw() {
     // Blazon observes the hover text once per frame here, in both game loops.
     BlazonBridge::instance().observeStatus(_statusString);
 
-    if (render->config->graphics.FullscreenView.value())
+    if (render->config->graphics.FullscreenView.value() && current_screen_type == SCREEN_GAME)
         return;
 
     render->DrawQuad2D(game_ui_statusbar, {0, 352});

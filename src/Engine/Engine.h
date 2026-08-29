@@ -97,6 +97,7 @@ class Engine {
     void drawHUD();
     void drawOverlay();
     void DrawGUI();
+    void updateViewport();
     void ResetCursor_Palettes_LODs_Level_Audio_SFT_Windows();
     void SecondaryInitialization();
     void _461103_load_level_sub();
@@ -218,4 +219,3 @@ bool _44100D_should_alter_right_panel();
 void startMapTransition(const MapDestination &destination);
 
 void TeleportToNWCDungeon();
-
