@@ -1,4 +1,5 @@
 #include <memory>
+#include <string>
 
 #include "Engine/AssetsManager.h"
 #include "Engine/Localization.h"
