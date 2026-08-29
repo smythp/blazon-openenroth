@@ -1083,6 +1083,32 @@ void ODM_ProcessPartyActions() {
                 partyIsWalking = true;
             } break;
 
+            case PARTY_FastStrafeLeft:
+            {
+                float sin_y = sinf(2 * pi_double * pParty->_viewYaw / 2048.0);
+                float dx = sin_y * pParty->walkSpeed * fWalkSpeedMultiplier;
+                partyInputSpeed.x -= 3 * dx / 2;
+
+                float cos_y = cosf(2 * pi_double * pParty->_viewYaw / 2048.0);
+                float dy = cos_y * pParty->walkSpeed * fWalkSpeedMultiplier;
+                partyInputSpeed.y += 3 * dy / 2;
+
+                partyIsWalking = true;
+            } break;
+
+            case PARTY_FastStrafeRight:
+            {
+                float sin_y = sinf(2 * pi_double * pParty->_viewYaw / 2048.0);
+                float dx = sin_y * pParty->walkSpeed * fWalkSpeedMultiplier;
+                partyInputSpeed.x += 3 * dx / 2;
+
+                float cos_y = cosf(2 * pi_double * pParty->_viewYaw / 2048.0);
+                float dy = cos_y * pParty->walkSpeed * fWalkSpeedMultiplier;
+                partyInputSpeed.y -= 3 * dy / 2;
+
+                partyIsWalking = true;
+            } break;
+
             case PARTY_WalkForward:
             {
                 float sin_y = sinf(2 * pi_double * pParty->_viewYaw / 2048.0),
@@ -1859,4 +1885,3 @@ double OutdoorLocation::GetPolygonMaxZ(RenderVertexSoft *pVertex, unsigned int u
     }
     return result;
 }
-

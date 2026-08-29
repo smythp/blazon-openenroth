@@ -225,6 +225,8 @@ class GameConfig : public Config {
             "It's impossible to target monsters that are further away than this value. "
             "This is also the depth at which status bar tips are displayed on mouse over."};
 
+        Bool RunStrafe = {this, "run_strafe", false, "Strafe at running speed while running."};
+
         Int AoeDamageDistance = {this, "aoe_damage_distance", 512, &ValidateAoeDistance,
             "Distance from point of impact of harmful AOE spell. "
             "Characters and monsters will suffer damage if they are close to point of impact by this value."};

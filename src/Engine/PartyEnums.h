@@ -174,7 +174,9 @@ enum class PartyAction : uint32_t {
     PARTY_RunBackward = 17,
     PARTY_FastTurnLeft = 18,
     PARTY_FastTurnRight = 19,
-    PARTY_UNUSED = 20, // was MouseLook
+    PARTY_FastStrafeLeft = 20,
+    PARTY_FastStrafeRight = 21,
+    PARTY_UNUSED = 22, // was MouseLook
 
     PARTY_dword = 0xFFFFFFFF
 };

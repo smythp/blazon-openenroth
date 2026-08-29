@@ -43,7 +43,8 @@ static bool PartyDoTurnBasedAwareAction(PartyAction action) {
 }
 
 static bool PartyStrafe(PartyAction direction) {
-    if (direction != PARTY_StrafeLeft && direction != PARTY_StrafeRight) {
+    if (direction != PARTY_StrafeLeft && direction != PARTY_StrafeRight &&
+        direction != PARTY_FastStrafeLeft && direction != PARTY_FastStrafeRight) {
         return false;
     }
 
@@ -146,20 +147,23 @@ void Io::KeyboardInputHandler::ProcessGameplayAction(InputAction action) {
 
     case INPUT_ACTION_STRAFE_LEFT:
         if (current_screen_type == SCREEN_GAME) {
-            PartyStrafe(PARTY_StrafeLeft);
+            PartyStrafe(engine->config->gameplay.RunStrafe.value() && pParty->uFlags2 & PARTY_FLAGS_2_RUNNING
+                            ? PARTY_FastStrafeLeft : PARTY_StrafeLeft);
         }
         break;
 
     case INPUT_ACTION_STRAFE_RIGHT:
         if (current_screen_type == SCREEN_GAME) {
-            PartyStrafe(PARTY_StrafeRight);
+            PartyStrafe(engine->config->gameplay.RunStrafe.value() && pParty->uFlags2 & PARTY_FLAGS_2_RUNNING
+                            ? PARTY_FastStrafeRight : PARTY_StrafeRight);
         }
         break;
 
     case INPUT_ACTION_TURN_LEFT:
         if (current_screen_type == SCREEN_GAME) {
             if (IsTurnStrafingToggled()) {
-                if (!PartyStrafe(PARTY_StrafeLeft)) {
+                if (!PartyStrafe(engine->config->gameplay.RunStrafe.value() && pParty->uFlags2 & PARTY_FLAGS_2_RUNNING
+                                     ? PARTY_FastStrafeLeft : PARTY_StrafeLeft)) {
                     break;
                 }
             } else {
@@ -174,7 +178,8 @@ void Io::KeyboardInputHandler::ProcessGameplayAction(InputAction action) {
     case INPUT_ACTION_TURN_RIGHT:
         if (current_screen_type == SCREEN_GAME) {
             if (IsTurnStrafingToggled()) {
-                if (!PartyStrafe(PARTY_StrafeRight)) {
+                if (!PartyStrafe(engine->config->gameplay.RunStrafe.value() && pParty->uFlags2 & PARTY_FLAGS_2_RUNNING
+                                     ? PARTY_FastStrafeRight : PARTY_StrafeRight)) {
                     break;
                 }
             } else {
