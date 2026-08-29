@@ -760,7 +760,7 @@ void GameUI_DrawFoodAndGold() {
     int text_y;  // esi@2
 
     if (uGameState != GAME_STATE_FINAL_WINDOW) {
-        if (!engine->config->graphics.FullscreenView.value()) {
+        if (!engine->config->graphics.FullscreenView.value() || current_screen_type != SCREEN_GAME) {
             text_y = _44100D_should_alter_right_panel() != 0 ? 381 : 322;
 
             GUIWindow::DrawText(assets->pFontSmallnum.get(), {0, text_y}, uGameUIFontMain, fmt::format("\r087{}", toCompactString(pParty->GetFood())), pPrimaryWindow->frameRect, 0, uGameUIFontShadow);

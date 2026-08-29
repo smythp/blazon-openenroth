@@ -24,6 +24,8 @@
 
 #include "Engine/Tables/IconFrameTable.h"
 
+#include "GUI/GUIWindow.h"
+
 //----- (004A7063) --------------------------------------------------------
 Color ModulateColor(Color diffuse, float multiplier) {
     float alpha = multiplier * diffuse.a;
@@ -1170,7 +1172,7 @@ void SpellFxRenderer::DrawPlayerBuffAnims() {
             continue;
         }
 
-        if (!render->config->graphics.FullscreenView.value()) {
+        if (!render->config->graphics.FullscreenView.value() || current_screen_type != SCREEN_GAME) {
             GraphicsImage *icon = pIconsFrameTable->animationFrame(buff->uSpellIconID, buff->uSpellAnimTimeElapsed);
             render->DrawQuad2D(icon, {pPlayerPortraitsXCoords_For_PlayerBuffAnimsDrawing[i], 385});
         }

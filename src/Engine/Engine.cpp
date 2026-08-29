@@ -76,6 +76,7 @@
 #include "GUI/UI/UIBlazon.h"
 #include "GUI/UI/UIMessageScroll.h"
 #include "GUI/UI/UIPopup.h"
+#include "GUI/UI/UISpell.h"
 #include "GUI/UI/UIStatusBar.h"
 #include "GUI/GUIMessageQueue.h"
 #include "GUI/Overlay/OverlaySystem.h"
@@ -188,6 +189,7 @@ void Engine::drawHUD() {
 
 //----- (0044103C) --------------------------------------------------------
 void Engine::Draw() {
+    updateViewport();
     drawWorld();
     drawHUD();
     render->flushAndScale();
@@ -197,9 +199,10 @@ void Engine::Draw() {
 
 
 void Engine::DrawGUI() {
+    updateViewport();
     render->ResetUIClipRect();
 
-    bool fullscreenView = config->graphics.FullscreenView.value();
+    bool fullscreenView = config->graphics.FullscreenView.value() && current_screen_type == SCREEN_GAME;
 
     if (pPrimaryWindow)
         BlazonBridge::instance().observePortraitHover(*pPrimaryWindow, !fullscreenView);
@@ -309,6 +312,12 @@ void Engine::DrawGUI() {
 
         GUIWindow::DrawText(assets->pFontArrus.get(), {16, debug_info_offset}, colorTable.White, floor_level_str, pPrimaryWindow->frameRect);
     }
+}
+
+void Engine::updateViewport() {
+    render->updateViewport();
+    if (pGUIWindow_CastTargetedSpell)
+        pGUIWindow_CastTargetedSpell->updateViewportButtons();
 }
 
 //----- (0047A815) --------------------------------------------------------

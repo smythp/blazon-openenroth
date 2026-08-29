@@ -254,9 +254,13 @@ void Io::Mouse::UI_OnMouseLeftClick() {
             // Block regular UI if targeted spell casting is active
             checkWindowList = &targetedSpellUI;
         }
+        bool fullscreenTargeting = engine->config->graphics.FullscreenView.value() &&
+                                   current_screen_type == SCREEN_GAME && pGUIWindow_CastTargetedSpell;
         for (GUIWindow *win : *checkWindowList) {
             if (win->Contains(x, y)) {
                 for (GUIButton *control : win->vButtons) {
+                    if (fullscreenTargeting && control != pGUIWindow_CastTargetedSpell->viewportButton())
+                        continue;
                     if (control->uButtonType == BUTTON_TYPE_NORMAL) {
                         if (control->Contains(x, y)) {
                             control->field_2C_is_pushed = true;
